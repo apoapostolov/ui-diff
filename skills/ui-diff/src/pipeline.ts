@@ -1,4 +1,4 @@
-import { appendFileSync, existsSync, mkdirSync, readFileSync, rmSync } from 'node:fs';
+import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync } from 'node:fs';
 import path from 'node:path';
 import { diffFocusOrder, diffViolations, type A11yIssue } from './a11y.js';
 import { resolveAuth, sanitizeUrl } from './auth.js';
@@ -45,11 +45,80 @@ export interface RunOutcome {
   noChanges: boolean;
 }
 
-const OUTPUT_ENTRIES = ['captures', 'diff', 'compare', 'variants', 'motion', 'styles', 'logs', 'report.json', 'comment.local.md', 'comment.md', 'summary.auto.md'];
+const FAILED_MARKER = 'last-run-failed.json';
+const OUTPUT_ENTRIES = ['captures', 'diff', 'compare', 'variants', 'motion', 'styles', 'report.json', 'comment.local.md', 'comment.md', 'summary.auto.md', FAILED_MARKER];
 
-export function prepareOutDir(outDir: string): void {
+export interface RunFailure {
+  failedAt: string;
+  error: string;
+  /** `createdAt` of the report that was kept. */
+  previousReport?: string;
+}
+
+function processAlive(pid: number): boolean {
+  if (pid === process.pid) return false;
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error) {
+    return (error as NodeJS.ErrnoException).code === 'EPERM';
+  }
+}
+
+/**
+ * Creates the directory a run writes into, inside `outDir`. The previous results stay untouched
+ * until `commitOutDir`; only `logs/` is reset, so it always holds the latest run, failed or not.
+ */
+export function stageOutDir(outDir: string): string {
   mkdirSync(outDir, { recursive: true });
-  for (const entry of OUTPUT_ENTRIES) rmSync(path.join(outDir, entry), { recursive: true, force: true });
+  for (const entry of readdirSync(outDir)) {
+    const pid = /^\.(?:run|old)-(\d+)$/.exec(entry)?.[1];
+    if (pid && !processAlive(Number(pid))) rmSync(path.join(outDir, entry), { recursive: true, force: true });
+  }
+  rmSync(path.join(outDir, 'logs'), { recursive: true, force: true });
+  const stage = path.join(outDir, `.run-${process.pid}`);
+  mkdirSync(stage, { recursive: true });
+  return stage;
+}
+
+/** Replaces the previous results in `outDir` with the staged ones. */
+export function commitOutDir(stage: string, outDir: string): void {
+  const old = path.join(outDir, `.old-${process.pid}`);
+  rmSync(old, { recursive: true, force: true });
+  mkdirSync(old);
+  const staged = readdirSync(stage);
+  for (const entry of new Set([...OUTPUT_ENTRIES, ...staged])) {
+    if (existsSync(path.join(outDir, entry))) renameSync(path.join(outDir, entry), path.join(old, entry));
+  }
+  for (const entry of staged) renameSync(path.join(stage, entry), path.join(outDir, entry));
+  rmSync(stage, { recursive: true, force: true });
+  rmSync(old, { recursive: true, force: true });
+}
+
+/** Leaves a note next to the kept report so `render` and `publish` can say it is not from the latest run. */
+export function markRunFailed(outDir: string, error: unknown): void {
+  const reportFile = path.join(outDir, 'report.json');
+  if (!existsSync(reportFile)) return;
+  let previousReport: string | undefined;
+  try {
+    previousReport = (JSON.parse(readFileSync(reportFile, 'utf8')) as Report).createdAt;
+  } catch {
+    // unreadable report: still record the failure
+  }
+  const failure: RunFailure = { failedAt: new Date().toISOString(), error: error instanceof Error ? error.message : String(error), previousReport };
+  writeRedacted(path.join(outDir, FAILED_MARKER), `${JSON.stringify(failure, null, 2)}\n`);
+  const shown = path.relative(process.cwd(), outDir);
+  log.warn(`kept the previous report in ${shown.startsWith('..') ? outDir : shown || '.'} (from ${previousReport ?? 'an earlier run'}); it does not include this run`);
+}
+
+export function lastRunFailure(outDir: string): RunFailure | undefined {
+  const file = path.join(outDir, FAILED_MARKER);
+  if (!existsSync(file)) return undefined;
+  try {
+    return JSON.parse(readFileSync(file, 'utf8')) as RunFailure;
+  } catch {
+    return { failedAt: 'unknown', error: 'unknown error' };
+  }
 }
 
 /** Keeps the output directory out of `git status` without touching tracked files. */
@@ -119,11 +188,26 @@ function variantSpecs(opts: RunOptions, routes: ResolvedRoute[]): Map<string, Va
   return specs;
 }
 
+/** Runs into a staging directory and swaps the results in only on success, so a failed run keeps the previous report. */
 export async function runPipeline(opts: RunOptions): Promise<RunOutcome> {
+  const stage = stageOutDir(opts.outDir);
+  await excludeFromGit(opts.cfg.repoRoot, opts.outDir);
+  try {
+    const outcome = await runStaged({ ...opts, outDir: stage }, opts.outDir);
+    commitOutDir(stage, opts.outDir);
+    const final = (file: string) => path.join(opts.outDir, path.relative(stage, file));
+    return { ...outcome, reportFile: final(outcome.reportFile), previewFile: final(outcome.previewFile) };
+  } catch (error) {
+    rmSync(stage, { recursive: true, force: true });
+    markRunFailed(opts.outDir, error);
+    throw error;
+  }
+}
+
+/** `opts.outDir` is the staging directory; server logs go to `finalDir/logs`, where error hints point. */
+async function runStaged(opts: RunOptions, finalDir: string): Promise<RunOutcome> {
   const { cfg, outDir } = opts;
   const runStart = new Date();
-  prepareOutDir(outDir);
-  await excludeFromGit(cfg.repoRoot, outDir);
   const warnings: string[] = [];
 
   const baseUrl = opts.baseUrl ?? cfg.preview.base;
@@ -202,10 +286,12 @@ export async function runPipeline(opts: RunOptions): Promise<RunOutcome> {
   const previewUrls = [baseUrl, headUrl].filter((u): u is string => Boolean(u));
   const auth = previewUrls.length || cfg.auth?.origins?.length ? resolveAuth(cfg.auth, previewUrls) : undefined;
   if (cfg.auth && !auth && previewUrls.length === 0) log.debug('auth configured but both sides run locally; credentials not used');
-  const sides = new SideManager(cfg, { outDir, keepWorktrees: opts.keepWorktrees });
+  const sides = new SideManager(cfg, { outDir: finalDir, keepWorktrees: opts.keepWorktrees });
   const onSignal = () => {
     killAllServers();
     sides.cleanupSync();
+    rmSync(outDir, { recursive: true, force: true });
+    markRunFailed(finalDir, 'interrupted');
     process.exit(130);
   };
   process.once('SIGINT', onSignal);

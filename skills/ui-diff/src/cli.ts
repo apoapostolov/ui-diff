@@ -11,7 +11,7 @@ import { git, repoRoot } from './git.js';
 import { createGhClient, findStickyComment, getPullRequest, prState, repoVisibility, upsertStickyComment } from './github.js';
 import { configureLog, log, redact, UiDiffError, writeRedacted } from './log.js';
 import { referencedImages, renderComment } from './markdown.js';
-import { runPipeline } from './pipeline.js';
+import { lastRunFailure, runPipeline } from './pipeline.js';
 import { encodePath, linkBaseFor, listAssetPrs, publishToBranch, pruneBranch, resolveRemote } from './publish.js';
 import type { Report } from './report.js';
 import { killAllServers } from './server.js';
@@ -222,6 +222,8 @@ function loadReport(outDir: string, summaryOption: unknown): { report: Report; s
   const reportFile = path.join(outDir, 'report.json');
   if (!existsSync(reportFile)) throw new UiDiffError(`No report at ${reportFile}`, { hint: 'Run `ui-diff run` first.' });
   const report = JSON.parse(readFileSync(reportFile, 'utf8')) as Report;
+  const failure = lastRunFailure(outDir);
+  if (failure) log.warn(`the last run failed (${failure.failedAt}: ${failure.error.split('\n')[0]}); this report is from an earlier run (${report.createdAt}). Rerun \`ui-diff run\` before publishing.`);
   const summaryFile = (summaryOption as string | undefined) ?? (existsSync(path.join(outDir, 'summary.md')) ? path.join(outDir, 'summary.md') : undefined);
   if (!summaryFile) {
     log.info('no summary.md found; using the automatic summary');

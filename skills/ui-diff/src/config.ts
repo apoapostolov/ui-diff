@@ -2,6 +2,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { z } from 'zod';
 import { UiDiffError } from './log.js';
+import { realpathIfExists } from './paths.js';
 
 const envName = z
   .string()
@@ -373,7 +374,7 @@ export function routeSlug(routePath: string, name?: string): string {
  */
 export function toRepoGlob(pattern: string, dirRel: string): string {
   const negated = pattern.startsWith('!');
-  let p = negated ? pattern.slice(1) : pattern;
+  let p = toSlashes(negated ? pattern.slice(1) : pattern);
   if (p.startsWith('/')) p = p.slice(1);
   else p = path.posix.normalize(dirRel ? path.posix.join(dirRel, p) : p);
   p = p.replace(/^\.\//, '');
@@ -418,6 +419,11 @@ export function formatZodError(error: z.ZodError, file: string): string {
     .join('\n');
 }
 
+/** Config paths always use "/": a Windows-style "src\\pages" means the same folder, not a glob escape. */
+export function toSlashes(p: string): string {
+  return p.replace(/\\/g, '/');
+}
+
 export function parseConfig(raw: unknown, opts: { file?: string; repoRoot: string }): ResolvedConfig {
   const result = ConfigSchema.safeParse(raw);
   const label = opts.file ? path.relative(process.cwd(), opts.file) || opts.file : 'config';
@@ -425,8 +431,14 @@ export function parseConfig(raw: unknown, opts: { file?: string; repoRoot: strin
     throw new UiDiffError(`Invalid configuration:\n${formatZodError(result.error, label)}`);
   }
   const parsed = result.data;
-  const dir = opts.file ? path.dirname(opts.file) : opts.repoRoot;
-  const dirRel = path.relative(opts.repoRoot, dir).split(path.sep).join('/');
+  parsed.cwd = toSlashes(parsed.cwd);
+  parsed.copyFiles = parsed.copyFiles.map(toSlashes);
+  parsed.tokens.files = parsed.tokens.files.map(toSlashes);
+  parsed.detect.include = parsed.detect.include.map(toSlashes);
+  parsed.detect.exclude = parsed.detect.exclude.map(toSlashes);
+  const repoRoot = realpathIfExists(opts.repoRoot);
+  const dir = opts.file ? path.dirname(realpathIfExists(opts.file)) : repoRoot;
+  const dirRel = path.relative(repoRoot, dir).split(path.sep).join('/');
   const routes = parsed.routes.map((r) => resolveRoute(r, dirRel, true));
   const seen = new Set<string>();
   for (const route of routes) {
@@ -452,21 +464,22 @@ export function parseConfig(raw: unknown, opts: { file?: string; repoRoot: strin
     file: opts.file,
     dir,
     dirRel,
-    repoRoot: opts.repoRoot,
+    repoRoot,
   };
 }
 
 export function findConfigFile(repoRoot: string, cwd: string, explicit?: string): string | undefined {
   if (explicit) {
-    const file = path.resolve(cwd, explicit);
+    const file = path.resolve(cwd, toSlashes(explicit));
     if (!existsSync(file)) throw new UiDiffError(`Config file not found: ${explicit}`);
-    return file;
+    return realpathIfExists(file);
   }
-  let dir = path.resolve(cwd);
+  const root = realpathIfExists(repoRoot);
+  let dir = realpathIfExists(path.resolve(cwd));
   for (;;) {
     const candidate = path.join(dir, CONFIG_FILENAME);
     if (existsSync(candidate)) return candidate;
-    if (dir === repoRoot || dir === path.dirname(dir)) break;
+    if (dir === root || dir === path.dirname(dir)) break;
     dir = path.dirname(dir);
   }
   return undefined;

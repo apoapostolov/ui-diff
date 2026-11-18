@@ -11,6 +11,7 @@ import { COLORS, composeRow, readPng, resizeToWidth, writePng } from './image.js
 import { log, UiDiffError, writeRedacted } from './log.js';
 import { renderComment } from './markdown.js';
 import { distinctFrames, encodeSideBySideGif, motionWarning, moveFile, recordFrames, writeFile, type RawFrame } from './motion.js';
+import { realpathIfExists } from './paths.js';
 import { autoSummary, computeStats, pct, truncationWarning, type CaptureResult, type MotionResult, type Report, type SideSummary, type VariantGroup } from './report.js';
 import { killAllServers, serverLogWarnings } from './server.js';
 import { SideManager, type Side, type SideRequest } from './sides.js';
@@ -54,7 +55,8 @@ export function prepareOutDir(outDir: string): void {
 
 /** Keeps the output directory out of `git status` without touching tracked files. */
 export async function excludeFromGit(repoRoot: string, outDir: string): Promise<void> {
-  const rel = path.relative(repoRoot, outDir).split(path.sep).join('/');
+  // Both sides resolved: on macOS a /tmp or /var path and its /private target would differ.
+  const rel = path.relative(realpathIfExists(repoRoot), realpathIfExists(outDir)).split(path.sep).join('/');
   if (!rel || rel.startsWith('..')) return;
   try {
     const exclude = path.join(await gitCommonDir(repoRoot), 'info', 'exclude');
@@ -188,7 +190,7 @@ export async function runPipeline(opts: RunOptions): Promise<RunOutcome> {
   let tokenFiles: string[] = [];
   if (tokensOn) {
     const requested = (opts.tokens ?? []).filter((f) => f !== 'auto');
-    tokenFiles = (requested.length ? requested.map((f) => path.resolve(process.cwd(), f)) : cfg.tokens.files.map((f) => path.resolve(cfg.dir, f))).filter(Boolean);
+    tokenFiles = (requested.length ? requested.map((f) => realpathIfExists(path.resolve(process.cwd(), f))) : cfg.tokens.files.map((f) => path.resolve(cfg.dir, f))).filter(Boolean);
     if (tokenFiles.length === 0) {
       const tracked = (await git(['ls-files', '-z'], { cwd: cfg.dir })).split('\0').filter(Boolean);
       tokenFiles = detectTokenFiles(cfg.dir, tracked).map((f) => path.join(cfg.dir, f));

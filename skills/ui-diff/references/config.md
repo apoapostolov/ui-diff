@@ -52,12 +52,12 @@ root", and `..` is allowed (`../../packages/ui/**`). Globs support `**`, `*`, `?
 | Key | Default | Notes |
 |---|---|---|
 | `startCommand` | — | Starts the app. `{port}` is replaced with a free port; `PORT` is also set. Required for local (worktree) runs. |
-| `baseUrl` | `http://127.0.0.1:{port}` | Where the started app listens. |
+| `baseUrl` | `http://localhost:{port}` | Where the started app listens. For a loopback host (`localhost`, `127.0.0.1`, `[::1]`) the other loopback addresses are tried too, because dev servers bind differently (Vite often listens on IPv6 `::1` only). Keep `localhost` for Next.js: its dev server blocks its own resources for `127.0.0.1`, so pages would not hydrate. |
 | `buildCommand` | — | Runs before `startCommand` (e.g. `npm run build` + `startCommand: "npm start"`). |
-| `install` | `"auto"` | `"auto"`: if the lockfile matches your checkout, link your installed `node_modules` (caches such as `.vite`/`.cache` are not shared); otherwise run the lockfile's install once (`npm ci`, `pnpm install --frozen-lockfile`, `yarn install --frozen-lockfile`, `bun install`). Lockfiles are compared by content hash, ignoring line endings and trailing whitespace; when base and head share a lockfile that differs from your checkout, one side installs and the other links to it. A string runs that command; `false` skips. If the app fails with linked dependencies, ui-diff retries with a clean install. |
+| `install` | `"auto"` | `"auto"`: if the lockfile matches your checkout, link your installed `node_modules` (caches such as `.vite`/`.cache` are not shared); otherwise run the lockfile's install once (`npm ci`, `pnpm install --frozen-lockfile`, `yarn install --frozen-lockfile`, `bun install`). Lockfiles are compared by content hash, ignoring line endings and trailing whitespace; when base and head share a lockfile that differs from your checkout, one side installs and the other links to it. Next.js apps always get a full install on each side and never linked `node_modules`, because Turbopack does not follow symlinks outside the project. A string runs that command; `false` skips. If the app exits or keeps answering 5xx with linked dependencies, ui-diff retries with a clean install after 30 s. |
 | `cwd` | `"."` | Directory (relative to the config) where commands run. |
 | `readyPath` | `"/"` | Polled until it answers with a status below 500. |
-| `startTimeoutMs` | `120000` | |
+| `startTimeoutMs` | `120000` | How long to wait for `readyPath` to answer. |
 | `env` | `{}` | Extra environment variables for install/build/start. |
 | `copyFiles` | `.env`, `.env.local`, `.env.development.local` | Untracked files copied from your checkout into each worktree when present. |
 

@@ -81,22 +81,38 @@ export function contextOptions(viewport: ViewportConfig, theme: ThemeConfig | un
 const require = createRequire(import.meta.url);
 
 /** Installs Playwright's Chromium on first use unless a system browser channel is configured. */
+const BROWSER_HINT =
+  'Run `npx --prefix <skill folder> playwright install chromium` once you are online (behind a proxy set HTTPS_PROXY, or PLAYWRIGHT_DOWNLOAD_HOST for a mirror), or use an installed Chrome with UI_DIFF_BROWSER_CHANNEL=chrome.';
+
+/** Installs Playwright's Chromium on first use unless a system browser channel is configured. */
 export async function ensureBrowser(): Promise<void> {
   if (process.env.UI_DIFF_BROWSER_CHANNEL || process.env.UI_DIFF_CHROMIUM_PATH) return;
   if (existsSync(chromium.executablePath())) return;
   log.step('installing Playwright Chromium (first run only)');
   const cli = path.join(path.dirname(require.resolve('playwright/package.json')), 'cli.js');
-  await exec(process.execPath, [cli, 'install', 'chromium'], { timeoutMs: 10 * 60 * 1000 });
+  try {
+    await exec(process.execPath, [cli, 'install', 'chromium'], { timeoutMs: 10 * 60 * 1000 });
+  } catch (error) {
+    const detail = (error as Error).message.split('\n').find((l) => /error|ECONN|ENOTFOUND|EAI_AGAIN|timed out|403|404/i.test(l)) ?? 'download failed';
+    throw new UiDiffError(`Chromium is not installed and could not be downloaded (${detail.trim()})`, { hint: BROWSER_HINT });
+  }
 }
 
 export async function launchBrowser(): Promise<Browser> {
   await ensureBrowser();
-  return chromium.launch({
-    headless: true,
-    channel: process.env.UI_DIFF_BROWSER_CHANNEL || undefined,
-    executablePath: process.env.UI_DIFF_CHROMIUM_PATH || undefined,
-    args: ['--font-render-hinting=none', '--disable-lcd-text', '--force-color-profile=srgb', '--hide-scrollbars', '--disable-skia-runtime-opts'],
-  });
+  try {
+    return await chromium.launch({
+      headless: true,
+      channel: process.env.UI_DIFF_BROWSER_CHANNEL || undefined,
+      executablePath: process.env.UI_DIFF_CHROMIUM_PATH || undefined,
+      args: ['--font-render-hinting=none', '--disable-lcd-text', '--force-color-profile=srgb', '--hide-scrollbars', '--disable-skia-runtime-opts'],
+    });
+  } catch (error) {
+    const lines = (error as Error).message.split('\n').filter((l) => l.trim() && !/^\s*at /.test(l));
+    throw new UiDiffError(`Could not start Chromium: ${lines.slice(0, 6).join(' ').replace(/\s+/g, ' ').slice(0, 600)}`, {
+      hint: 'On Linux install the system libraries with `npx --prefix <skill folder> playwright install --with-deps chromium`, or set UI_DIFF_BROWSER_CHANNEL=chrome to use an installed Chrome.',
+    });
+  }
 }
 
 export interface SessionOptions {

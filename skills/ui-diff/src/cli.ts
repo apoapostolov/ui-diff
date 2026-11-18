@@ -433,7 +433,7 @@ async function cmdInit(values: Values): Promise<void> {
   }
   const config = {
     startCommand: startCommand ?? 'npm run dev -- --port {port}',
-    baseUrl: 'http://127.0.0.1:{port}',
+    baseUrl: 'http://localhost:{port}',
     routes: [...routes].sort((a, b) => a.split('/').length - b.split('/').length || a.localeCompare(b)).slice(0, 8),
     globalFiles: [],
     viewports: [
@@ -526,7 +526,7 @@ export async function main(argv = process.argv.slice(2)): Promise<number> {
     killAllServers();
     if (error instanceof UiDiffError) {
       log.error(error.message);
-      if (error.hint) log.info(`hint: ${error.hint}`);
+      if (error.hint) log.hint(error.hint);
       return error.exitCode;
     }
     log.error(redact((error as Error).stack ?? String(error)));

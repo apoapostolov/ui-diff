@@ -250,7 +250,10 @@ const DetectSchema = z
 export const ConfigSchema = z
   .object({
     $schema: z.string().optional(),
-    baseUrl: z.string().default('http://127.0.0.1:{port}').describe('URL of the local server; {port} is replaced with a free port'),
+    baseUrl: z
+      .string()
+      .default('http://localhost:{port}')
+      .describe('URL of the local server; {port} is replaced with a free port. For loopback hosts the other loopback addresses are tried too'),
     startCommand: z.string().optional().describe('Starts the app; {port} is replaced and PORT is set'),
     buildCommand: z.string().optional(),
     install: z.union([z.literal('auto'), z.literal(false), z.string()]).default('auto'),

@@ -47,7 +47,7 @@ describe('dev servers', () => {
   });
 
   it('reports a server that never becomes ready', async () => {
-    await assert.rejects(waitForUrl('http://127.0.0.1:9/', { timeoutMs: 600, intervalMs: 100 }), /Timed out/);
+    await assert.rejects(waitForUrl('http://127.0.0.1:9/', { timeoutMs: 600, intervalMs: 100 }), /timed out/i);
   });
 
   it('turns HTTP errors into capture errors', () => {

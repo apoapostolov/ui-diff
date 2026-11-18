@@ -2,7 +2,7 @@ import { appendFileSync, existsSync, mkdirSync, readFileSync, rmSync } from 'nod
 import path from 'node:path';
 import { diffFocusOrder, diffViolations, type A11yIssue } from './a11y.js';
 import { resolveAuth, sanitizeUrl } from './auth.js';
-import { CaptureSession, launchBrowser, routeUrl, type CaptureRecord, type CaptureTarget } from './capture.js';
+import { CaptureSession, ensureBrowser, launchBrowser, routeUrl, type CaptureRecord, type CaptureTarget } from './capture.js';
 import { parseVariantFlag, pickThemes, pickViewports, resolveRoute, type ResolvedConfig, type ResolvedRoute, type Step, type ThemeConfig, type VariantSpec, type ViewportConfig } from './config.js';
 import { detectChanges, resolveBaseRef, type DetectResult } from './detect.js';
 import { composeCompare, diffPngs, focusBoxes } from './diff.js';
@@ -12,7 +12,7 @@ import { log, UiDiffError, writeRedacted } from './log.js';
 import { renderComment } from './markdown.js';
 import { distinctFrames, encodeSideBySideGif, motionWarning, moveFile, recordFrames, writeFile, type RawFrame } from './motion.js';
 import { autoSummary, computeStats, pct, truncationWarning, type CaptureResult, type MotionResult, type Report, type SideSummary, type VariantGroup } from './report.js';
-import { killAllServers } from './server.js';
+import { killAllServers, serverLogWarnings } from './server.js';
 import { SideManager, type Side, type SideRequest } from './sides.js';
 import { describeStep, runSteps } from './steps.js';
 import { aggregateFindings, auditSnapshot, buildTokenSet, detectTokenFiles, findingKeys, hasCategory, loadTokenFiles, tokenColorStrings, type StyleSnapshot, type TokenSet } from './tokens.js';
@@ -212,7 +212,11 @@ export async function runPipeline(opts: RunOptions): Promise<RunOutcome> {
   process.once('SIGTERM', onSignal);
   let browser: Awaited<ReturnType<typeof launchBrowser>> | undefined;
   try {
-    const [base, head] = await Promise.all([sides.prepare(baseRequest), sides.prepare(headRequest)]);
+    await ensureBrowser();
+    const prepared = await Promise.allSettled([sides.prepare(baseRequest), sides.prepare(headRequest)]);
+    const failed = prepared.find((p): p is PromiseRejectedResult => p.status === 'rejected');
+    if (failed) throw failed.reason;
+    const [base, head] = prepared.map((p) => (p as PromiseFulfilledResult<Side>).value);
     log.info(`base: ${base.label} (${base.mode}) · head: ${head.label} (${head.mode})`);
     browser = await launchBrowser();
     const session = new CaptureSession(browser, { cfg, auth, runStart });
@@ -285,6 +289,7 @@ export async function runPipeline(opts: RunOptions): Promise<RunOutcome> {
     }
     const cutWarning = truncationWarning(captures, cfg.capture.maxHeight);
     if (cutWarning) warnings.push(cutWarning);
+    for (const side of [base, head]) if (side.server) warnings.push(...serverLogWarnings(side.server.logFile, side.name));
 
     const report: Report = {
       ...reportBase,

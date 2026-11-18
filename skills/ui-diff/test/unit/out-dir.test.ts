@@ -57,13 +57,13 @@ describe('output directory staging', () => {
   it('records a failure next to the kept report', () => {
     const out = previousRun('failed');
     assert.equal(lastRunFailure(out), undefined);
-    markRunFailed(out, new Error('base: server exited with code 3'));
+    assert.equal(markRunFailed(out, new Error('base: server exited with code 3')), `kept the previous report in ${out} (from 2026-01-01T00:00:00.000Z); it does not include this run`);
     const failure = lastRunFailure(out)!;
     assert.equal(failure.error, 'base: server exited with code 3');
     assert.equal(failure.previousReport, '2026-01-01T00:00:00.000Z');
     const empty = path.join(dir, 'never-ran');
     mkdirSync(empty);
-    markRunFailed(empty, new Error('boom'));
+    assert.equal(markRunFailed(empty, new Error('boom')), undefined);
     assert.equal(lastRunFailure(empty), undefined, 'nothing to warn about without a kept report');
   });
 

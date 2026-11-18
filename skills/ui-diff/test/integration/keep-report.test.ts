@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { appendFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -64,7 +64,14 @@ describe('a failed run keeps the previous report', { timeout: 180_000 }, () => {
     assert.equal(cli('render').status, 0);
     assert.ok(existsSync(preview));
 
-    await assert.rejects(runPipeline({ cfg: { ...cfg, startCommand: 'node -e "console.error(\'boom from the app\'); process.exit(3)"' }, outDir, base: baseSha, head: headSha }));
+    // A config whose app exits at once, kept out of git status like a local experiment would be.
+    writeFileSync(path.join(repo, 'broken.config.json'), JSON.stringify({ ...JSON.parse(readFileSync(path.join(repo, 'ui-diff.config.json'), 'utf8')), startCommand: 'node -e "console.error(\'boom from the app\'); process.exit(3)"' }));
+    appendFileSync(path.join(repo, '.git', 'info', 'exclude'), 'broken.config.json\n');
+    const failed = cli('run', '--config', 'broken.config.json', '--base', baseSha, '--head', headSha);
+    assert.notEqual(failed.status, 0);
+    const errorAt = failed.stderr.indexOf('[ui-diff] error: ');
+    const keptAt = failed.stderr.indexOf('warning: kept the previous report');
+    assert.ok(errorAt >= 0 && keptAt > errorAt, `the real error must come first:\n${failed.stderr}`);
     assert.equal(readFileSync(path.join(outDir, 'report.json'), 'utf8'), kept, 'the previous report must survive a failed run');
     assert.ok(existsSync(compare), 'and so must its images');
     assert.ok(existsSync(preview), 'and the preview rendered from it');

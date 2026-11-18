@@ -9,7 +9,7 @@ import { detectChanges, detectSummary } from './detect.js';
 import { exec } from './exec.js';
 import { git, repoRoot } from './git.js';
 import { createGhClient, findStickyComment, getPullRequest, prState, repoVisibility, uploadGuard, upsertStickyComment } from './github.js';
-import { configureLog, log, redact, UiDiffError, writeRedacted } from './log.js';
+import { configureLog, log, notesAfter, redact, UiDiffError, writeRedacted } from './log.js';
 import { referencedImages, renderComment } from './markdown.js';
 import { lastRunFailure, runPipeline } from './pipeline.js';
 import { encodePath, linkBaseFor, listAssetPrs, publishToBranch, pruneBranch, resolveRemote } from './publish.js';
@@ -539,10 +539,11 @@ export async function main(argv = process.argv.slice(2)): Promise<number> {
     if (error instanceof UiDiffError) {
       log.error(error.message);
       if (error.hint) log.hint(error.hint);
-      return error.exitCode;
+    } else {
+      log.error(redact((error as Error).stack ?? String(error)));
     }
-    log.error(redact((error as Error).stack ?? String(error)));
-    return 1;
+    for (const note of notesAfter(error)) log.warn(note);
+    return error instanceof UiDiffError ? error.exitCode : 1;
   }
 }
 

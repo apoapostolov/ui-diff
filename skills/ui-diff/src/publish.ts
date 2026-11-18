@@ -58,13 +58,43 @@ function identityEnv(): NodeJS.ProcessEnv {
   };
 }
 
+/** Whether `refs/heads/<branch>` exists on the remote; throws when the remote cannot be read at all. */
+async function remoteHasBranch(repo: string, remote: string, branch: string): Promise<boolean> {
+  const ref = `refs/heads/${branch}`;
+  // --exit-code: 2 means the remote answered and has no such ref; anything else non-zero is an access or network error.
+  const result = await exec('git', ['ls-remote', '--exit-code', remote, ref], { cwd: repo, allowFailure: true });
+  if (result.code === 2) return false;
+  if (result.code !== 0) throw remoteReadError(remote, branch, result.stderr);
+  return result.stdout.split('\n').some((line) => line.split('\t')[1] === ref);
+}
+
+function redactUrlCredentials(text: string): string {
+  return text.replace(/(\w+:\/\/)[^/@\s]+@/g, '$1***@');
+}
+
+function remoteReadError(remote: string, branch: string, stderr: string): UiDiffError {
+  const detail = stderr
+    .split('\n')
+    .map((l) => l.trim())
+    .filter((l) => l && !/^please make sure|^and the repository exists/i.test(l))
+    .slice(-2)
+    .join(' ');
+  const access = /not found|permission denied|authentication failed|could not read (username|password)|\b40[13]\b|access denied|terminal prompts disabled/i.test(stderr);
+  return new UiDiffError(`Could not read ${branch} from ${remote}: ${redactUrlCredentials(detail) || 'git exited with an error'}`, {
+    hint: access
+      ? `git could not access ${remote} with your credentials. Check that \`git ls-remote ${remote}\` works (HTTPS: \`gh auth setup-git\` or a credential helper; SSH: your key). Publishing needs push access.`
+      : `Check your network and that \`git ls-remote ${remote}\` works.`,
+    exitCode: access ? 3 : 1,
+  });
+}
+
 async function fetchTip(repo: string, remote: string, branch: string): Promise<string | undefined> {
+  if (!(await remoteHasBranch(repo, remote, branch))) return undefined;
   const result = await exec('git', ['fetch', '--no-tags', '--quiet', remote, `+refs/heads/${branch}:${TIP_REF}`], { cwd: repo, allowFailure: true });
   if (result.code !== 0) {
-    if (/couldn't find remote ref|not found/i.test(result.stderr)) return undefined;
-    throw new UiDiffError(`Could not fetch ${branch} from ${remote}: ${result.stderr.trim().split('\n').pop()}`, {
-      hint: 'Check that you can push to this repository (git push access is needed to publish images).',
-    });
+    // Deleted between ls-remote and fetch: publish as if it never existed (the push lease still guards).
+    if (!(await remoteHasBranch(repo, remote, branch))) return undefined;
+    throw remoteReadError(remote, branch, result.stderr);
   }
   return (await git(['rev-parse', TIP_REF], { cwd: repo })).trim();
 }
@@ -135,7 +165,7 @@ async function pushCommit(repo: string, remote: string, branch: string, commit: 
   const result = await exec('git', args, { cwd: repo, allowFailure: true });
   if (result.code === 0) return 'ok';
   if (/stale info|rejected|non-fast-forward|fetch first/i.test(result.stderr)) return 'stale';
-  throw new UiDiffError(`git push to ${branch} failed: ${result.stderr.trim().split('\n').slice(-3).join(' ')}`, {
+  throw new UiDiffError(`git push to ${branch} failed: ${redactUrlCredentials(result.stderr.trim().split('\n').slice(-3).join(' '))}`, {
     hint: 'Publishing needs push access to this repository. Without it, use --no-upload (text-only comment) or attach images manually.',
     exitCode: 3,
   });

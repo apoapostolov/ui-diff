@@ -137,7 +137,8 @@ node "$SKILL/bin/ui-diff.mjs" publish --pr <n>
   renders only for people who can read the repo.
 - The comment is found by a hidden marker (`<!-- ui-diff:sticky id=default -->`) and edited in place;
   reruns never stack comments, unchanged bodies are not re-sent, and ticked variant picks survive.
-- Exit code 3 means no push access (e.g. a fork): use `--no-upload` for a text-only comment, or
+- Exit code 3 means git could not read or push the repository (no push access, e.g. a fork, or
+  missing git credentials; the error says which): use `--no-upload` for a text-only comment, or
   `--no-comment` to upload and print the markdown without posting.
 - No PR yet: use `render` (or `publish --dry-run`) to produce the comment and offer to post once
   the PR exists.

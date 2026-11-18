@@ -89,7 +89,7 @@ radii, font size, weight and family. Only changed screens are audited, and with 
 only elements that intersect the changed areas. Each finding lists selectors, the nearest token
 (when one is close) and whether base already used the value: new values are reported, existing
 ones are collapsed. Categories without any tokens are skipped. Options: `properties`,
-`colorTolerance` (per channel, 2), `pxTolerance` (0.5), `remBase` (16), `allow`, `ignoreSelectors`,
+`colorTolerance` (per channel, 2), `pxTolerance` (0.5), `remBase` (16), `allow`, `categories`, `ignoreSelectors`,
 `maxElements`, `maxFindings`.
 
 ## Accessibility delta

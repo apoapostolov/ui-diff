@@ -26,7 +26,7 @@ directly.
 
 1. **Detects changed UI files** between base and head and maps them to routes through
    `ui-diff.config.json` (`routes[].files`, `globalFiles`), framework routing conventions (Next.js,
-   SvelteKit, Nuxt, Astro, Remix, plain HTML) and an import graph (aliases, workspace packages,
+   SvelteKit, Nuxt, Astro, Remix, TanStack Router, plain HTML) and an import graph (aliases, workspace packages,
    CSS `@import`/`url()`, HTML `href`/`src`). Unplaceable files and dynamic routes are listed for
    the agent to resolve.
 2. **Runs base and head** in temporary git worktrees (dependencies linked or installed, each app

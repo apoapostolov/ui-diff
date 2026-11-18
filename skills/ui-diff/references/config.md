@@ -87,7 +87,7 @@ them). Each server runs in its own process group; only those processes are stopp
 
 | Key | Default | Notes |
 |---|---|---|
-| `conventions` | `true` | File-system routing: Next.js (app and pages), SvelteKit, Nuxt, Astro, Remix/React Router, plain HTML. |
+| `conventions` | `true` | File-system routing: Next.js (app and pages), SvelteKit, Nuxt, Astro, Remix/React Router, TanStack Router (`src/routes`), plain HTML. |
 | `imports` | `true` | Follow imports from changed files to pages/route files. |
 | `aliases` | `{}` | Extra import aliases, e.g. `{ "~/": "src/" }` (tsconfig/jsconfig `paths` are read automatically). |
 | `maxRoutes` | `12` | Further routes are listed as "not captured". |

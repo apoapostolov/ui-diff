@@ -1,0 +1,78 @@
+@import url("tokens.css");
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: var(--font-sans);
+  font-size: var(--font-size-md);
+  line-height: 1.5;
+  color: var(--text);
+  background: var(--bg);
+}
+
+a {
+  color: var(--color-brand-500);
+}
+
+.container {
+  max-width: 1040px;
+  margin: 0 auto;
+  padding: 0 var(--space-6);
+}
+
+.site-header {
+  border-bottom: 1px solid var(--border);
+}
+
+.site-header .container {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 64px;
+}
+
+.logo {
+  color: var(--text);
+  font-size: var(--font-size-xl);
+  font-weight: var(--font-weight-bold);
+  text-decoration: none;
+}
+
+.nav {
+  display: flex;
+  gap: var(--space-6);
+}
+
+.nav a {
+  color: var(--muted);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  text-decoration: none;
+}
+
+.site-footer {
+  border-top: 1px solid var(--border);
+  padding: var(--space-8) 0;
+  color: var(--muted);
+  font-size: var(--font-size-sm);
+}
+
+.site-footer .container {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: var(--space-4);
+}
+
+.live {
+  font-variant-numeric: tabular-nums;
+}
+
+@media (max-width: 640px) {
+  .nav {
+    display: none;
+  }
+}

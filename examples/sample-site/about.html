@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>About · Acme Analytics</title>
+    <link rel="stylesheet" href="styles.css">
+    <script>
+      if (new URLSearchParams(location.search).get('theme') === 'dark') document.documentElement.dataset.theme = 'dark';
+    </script>
+    <style>
+      .about { padding: var(--space-16) 0; max-width: 680px; }
+      .about h1 { font-size: var(--font-size-4xl); margin: 0 0 var(--space-4); }
+      .about p { color: var(--muted); font-size: var(--font-size-lg); }
+    </style>
+  </head>
+  <body>
+    <header class="site-header">
+      <div class="container">
+        <a class="logo" href="/">Acme Analytics</a>
+        <nav class="nav" aria-label="Main">
+          <a href="/#features">Features</a>
+          <a href="/#pricing">Pricing</a>
+          <a href="/about.html">About</a>
+        </nav>
+      </div>
+    </header>
+    <main class="container about">
+      <h1>We build tools for curious teams</h1>
+      <p>Acme Analytics started as a weekend project to answer one question: which features do people actually use? Today it helps product teams ship with confidence.</p>
+    </main>
+    <footer class="site-footer">
+      <div class="container"><span>© Acme Analytics</span></div>
+    </footer>
+  </body>
+</html>

@@ -1,0 +1,147 @@
+.hero {
+  padding: var(--space-16) 0 var(--space-12);
+}
+
+.hero h1 {
+  margin: 0 0 var(--space-4);
+  font-size: var(--font-size-5xl);
+  line-height: 1.1;
+  letter-spacing: -0.02em;
+}
+
+.hero p {
+  max-width: 560px;
+  margin: 0 0 var(--space-8);
+  color: var(--muted);
+  font-size: var(--font-size-lg);
+}
+
+.hero-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+}
+
+.cta {
+  display: inline-block;
+  padding: 8px 14px;
+  border-radius: var(--radius-sm);
+  background: var(--color-brand-500);
+  color: var(--color-neutral-0);
+  font-weight: var(--font-weight-semibold);
+  text-decoration: none;
+}
+
+.secondary {
+  font-weight: var(--font-weight-medium);
+}
+
+.hero-art {
+  display: block;
+  width: 100%;
+  height: auto;
+  margin-top: var(--space-10);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+}
+
+.features {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--space-6);
+  padding: var(--space-12) 0;
+}
+
+.card,
+.plan {
+  padding: var(--space-6);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+}
+
+.card h3,
+.plan h3 {
+  margin: 0 0 var(--space-2);
+  font-size: var(--font-size-lg);
+}
+
+.card p {
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--font-size-sm);
+}
+
+.pricing h2,
+.newsletter h2 {
+  margin: 0 0 var(--space-6);
+  font-size: var(--font-size-2xl);
+}
+
+.plans {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: var(--space-6);
+}
+
+.plan .price {
+  margin: 0 0 var(--space-2);
+  font-size: var(--font-size-4xl);
+  font-weight: var(--font-weight-bold);
+}
+
+.plan p {
+  margin: 0;
+  color: var(--muted);
+}
+
+.pricing,
+.newsletter {
+  padding: var(--space-12) 0;
+}
+
+.newsletter form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--space-3);
+}
+
+.newsletter label {
+  display: block;
+  margin-bottom: var(--space-1);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+}
+
+.newsletter input {
+  min-width: 260px;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
+}
+
+.newsletter button {
+  padding: var(--space-2) var(--space-4);
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: var(--text);
+  color: var(--bg);
+  font: inherit;
+  font-weight: var(--font-weight-semibold);
+}
+
+@media (max-width: 640px) {
+  .hero h1 {
+    font-size: var(--font-size-4xl);
+  }
+
+  .features,
+  .plans {
+    grid-template-columns: 1fr;
+  }
+}

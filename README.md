@@ -277,3 +277,7 @@ Not built yet; ideas that would make reviews better for design engineers:
 
 Inspired by [davidamunga/ui-diff](https://github.com/davidamunga/ui-diff) (MIT). This is an
 independent implementation; no code was copied.
+
+## License
+
+[MIT](LICENSE) © 2026 Murat Alpay

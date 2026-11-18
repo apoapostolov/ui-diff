@@ -60,10 +60,16 @@ skills_dir() {
   esac
 }
 
+# True when $1 is a symlink or a folder holding this skill (SKILL.md frontmatter "name: ui-diff").
+is_ui_diff() {
+  [[ -L "$1" ]] || [[ -f "$1/SKILL.md" && "$(sed -n '2p' "$1/SKILL.md")" == "name: ui-diff" ]]
+}
+
+status=0
 for agent in "${agents[@]}"; do
   dest="$(skills_dir "$agent")/ui-diff"
   if [[ "$mode" == "uninstall" ]]; then
-    if [[ -L "$dest" ]] || [[ -f "$dest/SKILL.md" && "$(sed -n '2p' "$dest/SKILL.md")" == "name: ui-diff" ]]; then
+    if is_ui_diff "$dest"; then
       rm -rf "$dest"
       echo "removed $dest"
     fi
@@ -74,7 +80,14 @@ for agent in "${agents[@]}"; do
       echo "skipping $dest: a folder already exists (remove it or use --copy to refresh it)" >&2
       continue
     fi
+    if ! is_ui_diff "$dest"; then
+      echo "refusing to replace $dest: it exists but is not the ui-diff skill (move it away first)" >&2
+      status=1
+      continue
+    fi
     rm -rf "$dest"
+  elif [[ -L "$dest" && "$mode" == "copy" ]]; then
+    rm -f "$dest" # never copy through a link into the clone itself
   fi
   mkdir -p "$(dirname "$dest")"
   if [[ "$mode" == "link" ]]; then
@@ -92,3 +105,4 @@ if [[ "$mode" == "link" ]]; then
   (cd "$src" && npm install --no-audit --no-fund --loglevel=error)
   echo "done. Chromium is downloaded on the first capture (or run: npx --prefix \"$src\" playwright install chromium)."
 fi
+exit "$status"

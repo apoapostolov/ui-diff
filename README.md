@@ -13,14 +13,36 @@ directly.
 
 ## Contents
 
+- [Quick start](#quick-start)
 - [What it does](#what-it-does)
 - [Install](#install)
 - [Use](#use)
 - [Configure](#configure)
 - [Privacy and image hosting](#privacy-and-image-hosting)
 - [Verified example](#verified-example)
+- [Troubleshooting](#troubleshooting)
 - [Development](#development)
 - [Roadmap](#roadmap)
+
+## Quick start
+
+You need git, Node.js 20.10+ and the GitHub CLI signed in (`gh auth login`). On Windows, use WSL2.
+
+```bash
+gh repo clone psychedelichip/ui-diff ~/src/ui-diff   # or: git clone git@github.com:psychedelichip/ui-diff.git ~/src/ui-diff
+~/src/ui-diff/install.sh --claude                   # Claude Code; Cursor reads it too. --codex for Codex
+alias ui-diff='node ~/src/ui-diff/skills/ui-diff/bin/ui-diff.mjs'
+
+cd ~/src/my-app        # on your feature branch
+ui-diff init           # writes ui-diff.config.json: check startCommand and routes
+ui-diff run            # your branch, uncommitted changes included, vs the default branch
+```
+
+The first `run` downloads Chromium (~150 MB). Results are in `.ui-diff/`: open
+`.ui-diff/comment.local.md` for the comment preview and `.ui-diff/compare/` for the
+`before | after | diff` images. Nothing is posted until you run `ui-diff publish`. In an agent
+session, ask: *"Run the ui-diff skill on PR #123 and update the sticky PR comment."*
+If something fails, see [Troubleshooting](#troubleshooting).
 
 ## What it does
 
@@ -55,13 +77,13 @@ Extras, each behind a flag or config key:
 
 ## Install
 
-Requirements: macOS or Linux, git, Node.js 20.10+, and the GitHub CLI (`gh auth login`) to post
+Requirements: macOS or Linux (on Windows, WSL2), git, Node.js 20.10+, and the GitHub CLI (`gh auth login`) to post
 comments. The first run installs the skill's npm dependencies and builds it (about a minute); the
 first capture downloads Playwright's Chromium (~150 MB) into `~/.cache/ms-playwright`. To use an
 installed Chrome instead, set `UI_DIFF_BROWSER_CHANNEL=chrome`.
 
 ```bash
-git clone git@github.com:psychedelichip/ui-diff.git ~/src/ui-diff
+gh repo clone psychedelichip/ui-diff ~/src/ui-diff   # uses your gh login; or git clone over SSH
 cd ~/src/ui-diff
 ```
 
@@ -225,6 +247,21 @@ after commit with itself reports 8/8 captures unchanged. Publishing was verified
 bare remote; no real PR was contacted. Reproduce with
 [`examples/README.md`](examples/README.md).
 
+## Troubleshooting
+
+The common cases, with fixes, are in
+[`references/troubleshooting.md`](skills/ui-diff/references/troubleshooting.md):
+
+- **Server never ready**: Vite and similar servers bind `localhost` (often IPv6 only) and Next.js
+  blocks its dev resources for `127.0.0.1`, so use `"baseUrl": "http://localhost:{port}"`; make
+  sure `startCommand` passes `{port}`; raise `startTimeoutMs` for slow boots.
+- **"No UI changes" / `unmatched` files**: check `ui-diff detect` reasons; add aliases that only
+  live in bundler config to `detect.aliases`, map shared code with `routes[].files`, or pass `--routes`.
+- **Diffs on identical commits**: mask JavaScript animations, carousels and live data, or freeze the
+  clock with `capture.fixedTime`.
+- **Publish refused**: the repository is public or its visibility is unknown; read the dry run's
+  `problems` before posting.
+
 ## Development
 
 ```bash
@@ -250,7 +287,7 @@ skills/ui-diff/
 │   ├── motion.ts tokens.ts a11y.ts                   extras
 │   ├── report.ts markdown.ts pipeline.ts             report, summary, comment
 │   └── publish.ts github.ts                          assets branch, sticky comment via gh
-├── references/              config.md · extras.md · privacy.md
+├── references/              config.md · extras.md · privacy.md · troubleshooting.md
 ├── schema/                  ui-diff.config.schema.json
 └── test/                    unit/ · integration/
 ```

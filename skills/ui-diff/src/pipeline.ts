@@ -11,7 +11,7 @@ import { COLORS, composeRow, readPng, resizeToWidth, writePng } from './image.js
 import { log, UiDiffError, writeRedacted } from './log.js';
 import { renderComment } from './markdown.js';
 import { encodeSideBySideGif, moveFile, recordFrames, writeFile, type RawFrame } from './motion.js';
-import { autoSummary, computeStats, pct, type CaptureResult, type MotionResult, type Report, type SideSummary, type VariantGroup } from './report.js';
+import { autoSummary, computeStats, pct, truncationWarning, type CaptureResult, type MotionResult, type Report, type SideSummary, type VariantGroup } from './report.js';
 import { killAllServers } from './server.js';
 import { SideManager, type Side, type SideRequest } from './sides.js';
 import { describeStep, runSteps } from './steps.js';
@@ -266,8 +266,13 @@ export async function runPipeline(opts: RunOptions): Promise<RunOutcome> {
         if (r?.pageErrors.length) c.warnings.push(`${label}: uncaught page error: ${r.pageErrors[0]}`);
         if (r && r.ok && !r.stable) c.warnings.push(`${label}: page did not settle (animations or live data?); consider capture.mask or capture.fixedTime`);
       }
-      if (b?.truncated || h?.truncated) c.truncated = true;
+      if (b?.truncated || h?.truncated) {
+        c.truncated = true;
+        c.warnings.push(`page is taller than capture.maxHeight (${cfg.capture.maxHeight}px); only the top part was compared`);
+      }
     }
+    const cutWarning = truncationWarning(captures, cfg.capture.maxHeight);
+    if (cutWarning) warnings.push(cutWarning);
 
     const report: Report = {
       ...reportBase,

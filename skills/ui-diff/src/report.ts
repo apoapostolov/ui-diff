@@ -137,6 +137,15 @@ export function describeCapture(c: CaptureResult): string {
   return parts.join(' · ');
 }
 
+/** Report-level warning when some pages were taller than capture.maxHeight and only their top part was compared. */
+export function truncationWarning(captures: CaptureResult[], maxHeight: number): string | undefined {
+  const cut = captures.filter((c) => c.truncated);
+  if (cut.length === 0) return undefined;
+  const names = cut.slice(0, 5).map((c) => c.id).join(', ');
+  const more = cut.length > 5 ? ` and ${cut.length - 5} more` : '';
+  return `${cut.length} capture${cut.length === 1 ? ' was' : 's were'} cut at capture.maxHeight (${maxHeight}px): ${names}${more}. Changes below that line are not compared; raise capture.maxHeight to include them.`;
+}
+
 /** Data-driven summary used when no agent/human summary is supplied. */
 export function autoSummary(report: Report): string {
   const lines: string[] = [];
@@ -176,6 +185,8 @@ export function autoSummary(report: Report): string {
       lines.push('- Design tokens: no new off-token values in the changed areas.');
     }
   }
+  const cut = report.captures.filter((c) => c.truncated);
+  if (cut.length) lines.push(`- ⚠️ ${cut.length} capture${cut.length === 1 ? '' : 's'} only cover the top of the page (capture.maxHeight); changes further down were not compared.`);
   if (report.variants.length) lines.push(`- ${report.variants.length} variant set${report.variants.length === 1 ? '' : 's'} to choose from below.`);
   if (report.motion.length) lines.push(`- ${report.motion.length} motion clip${report.motion.length === 1 ? '' : 's'} recorded for interactions static screenshots miss.`);
   if (report.detect?.skippedRoutes.length) lines.push(`- Not captured (over the route limit): ${report.detect.skippedRoutes.map((r) => `\`${r}\``).join(', ')}.`);

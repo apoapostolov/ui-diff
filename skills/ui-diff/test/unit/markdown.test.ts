@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { code, compressWhere, extractPicks, referencedImages, renderComment, stickyMarker } from '../../src/markdown.js';
-import { autoSummary, computeStats, pct } from '../../src/report.js';
+import { autoSummary, computeStats, pct, truncationWarning } from '../../src/report.js';
 import { sampleReport } from './fixtures.js';
 
 const link = (p: string) => `https://github.com/acme/app/raw/ui-diff-assets/pr-1/${p}`;
@@ -72,5 +72,31 @@ describe('comment rendering', () => {
     assert.equal(pct(0.1234), '12.3%');
     assert.equal(compressWhere(['/ desktop/light', '/ mobile/light', '/about desktop/light'], new Map([['/', 2], ['/about', 2]])), '`/` (all 2); `/about` desktop/light');
     assert.match(autoSummary(sampleReport({ captures: [], stats: computeStats([]) })), /No routes were captured/);
+  });
+});
+
+describe('truncated captures', () => {
+  const cutReport = () => {
+    const r = sampleReport();
+    r.captures[1] = { ...r.captures[1], truncated: true };
+    return r;
+  };
+
+  it('builds a report warning that names the cut captures and the limit', () => {
+    const r = cutReport();
+    const warning = truncationWarning(r.captures, 4000);
+    assert.match(warning ?? '', /^1 capture was cut at capture\.maxHeight \(4000px\): home__mobile__light\./);
+    assert.equal(truncationWarning(sampleReport().captures, 4000), undefined);
+  });
+
+  it('mentions partial captures in the automatic summary', () => {
+    assert.match(autoSummary(cutReport()), /1 capture only cover the top of the page/);
+    assert.doesNotMatch(autoSummary(sampleReport()), /top of the page/);
+  });
+
+  it('warns in the comment even when a custom summary is used', () => {
+    const body = renderComment(cutReport(), { id: 'default', title: 'UI diff', link, summary: 'Custom summary.' });
+    assert.match(body, /Partial captures: only the top of `\/ · mobile` was compared/);
+    assert.doesNotMatch(renderComment(sampleReport(), { id: 'default', title: 'UI diff', link }), /Partial captures/);
   });
 });

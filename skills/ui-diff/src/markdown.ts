@@ -256,6 +256,10 @@ function renderOnce(report: Report, opts: RenderOptions): string {
   out.push(...variantSection(report, opts), ...motionSection(report, opts), ...a11ySection(report, opts), ...tokenSection(report, opts));
   const notCaptured = [...(report.detect?.skippedRoutes ?? []), ...(report.detect?.needsExample ?? []).map((n) => n.route)];
   if (notCaptured.length) out.push(`<sub>Affected but not captured: ${notCaptured.map(code).join(', ')}</sub>`, '');
+  const cut = report.captures.filter((c) => c.truncated);
+  if (cut.length) {
+    out.push(`> ⚠️ Partial captures: only the top of ${cut.map((c) => code(captureLabel(c, report.themes.length))).join(', ')} was compared (\`capture.maxHeight\`). Changes below that line are not shown.`, '');
+  }
   const footer = [`ui-diff ${report.tool.version}`, report.base.shortSha && `base ${code(report.base.shortSha)}`, report.head.shortSha && `head ${code(report.head.shortSha)}`, opts.storageNote, `generated ${report.createdAt.replace('T', ' ').replace(/\.\d+Z$/, ' UTC')}`]
     .filter(Boolean)
     .join(' · ');

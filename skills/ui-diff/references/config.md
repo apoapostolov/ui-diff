@@ -6,7 +6,8 @@ current directory, or `--config <file>`. The config is read from your checkout a
 base and head. A JSON Schema lives at `schema/ui-diff.config.schema.json` in the skill folder.
 
 **Paths and globs** are relative to the config file. A leading `/` means "relative to the repo
-root", and `..` is allowed (`../../packages/ui/**`). Globs support `**`, `*`, `?`, `{a,b}`,
+root", and `..` is allowed (`../../packages/ui/**`). Use `/` as the separator; a Windows-style `\`
+is read as `/` too. Globs support `**`, `*`, `?`, `{a,b}`,
 `[abc]` and `!negation`.
 
 ## Minimal
@@ -88,8 +89,8 @@ them). Each server runs in its own process group; only those processes are stopp
 | Key | Default | Notes |
 |---|---|---|
 | `conventions` | `true` | File-system routing: Next.js (app and pages), SvelteKit, Nuxt, Astro, Remix/React Router, TanStack Router (`src/routes`), plain HTML. |
-| `imports` | `true` | Follow imports from changed files to pages/route files. |
-| `aliases` | `{}` | Extra import aliases, e.g. `{ "~/": "src/" }` (tsconfig/jsconfig `paths` are read automatically). |
+| `imports` | `true` | Follow imports from changed files to pages, route files and layouts (a component used only in `app/layout.tsx`, `__root.tsx` or `pages/_app.tsx` maps to every route that layout wraps). |
+| `aliases` | `{}` | Extra import aliases, e.g. `{ "~/": "src/" }`. tsconfig/jsconfig `paths` are read automatically, including configs reached through `references` (Vite's `tsconfig.app.json`) and relative `extends`, and package.json `#` imports. |
 | `maxRoutes` | `12` | Further routes are listed as "not captured". |
 | `include` / `exclude` | UI-ish extensions / tests, stories, build output, lockfiles | Which changed files count as UI. |
 

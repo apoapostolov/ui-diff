@@ -4,7 +4,7 @@ import { resolveRoute, type ResolvedConfig, type ResolvedRoute } from './config.
 import { inferFromPath, routeUnder } from './conventions.js';
 import { changedFiles, defaultBaseRef, git, lsTree, mergeBase, readBlobs, revParse, type ChangedFile } from './git.js';
 import { firstMatch, matchAny } from './glob.js';
-import { addAssetMentions, aliasesFromPackageImports, aliasesFromTsconfig, buildReverseGraph, findEntries, isAssetFile, isSourceFile, type ResolveContext } from './imports.js';
+import { addAssetMentions, aliasesFromPackageImports, aliasesFromTsconfig, buildReverseGraph, findEntries, isAssetFile, isSourceFile, parseJsonc, tsconfigLinks, type ResolveContext } from './imports.js';
 import { log, UiDiffError } from './log.js';
 
 export type Confidence = 'high' | 'medium' | 'low';
@@ -135,6 +135,31 @@ export async function mapChangesToRoutes(input: MappingInput): Promise<MappingRe
     if (routes.length) entries.set(file, routes);
   }
 
+  const knownRoutes = (): ResolvedRoute[] => {
+    const all = new Map<string, ResolvedRoute>();
+    for (const r of cfg.routes) all.set(r.path, r);
+    for (const p of [...conventionRoutes].sort((a, b) => a.split('/').length - b.split('/').length || a.localeCompare(b))) {
+      if (!all.has(p)) all.set(p, routeFor(p));
+    }
+    if (all.size === 0) all.set('/', routeFor('/'));
+    return [...all.values()];
+  };
+
+  // Layouts and app-wide files are entries too: a component imported only by app/layout.tsx,
+  // __root.tsx or pages/_app.tsx affects every route they wrap.
+  if (cfg.detect.conventions) {
+    for (const file of headFiles) {
+      if (!inApp(file)) continue;
+      const hit = inferFromPath(appRel(file));
+      if (hit?.kind !== 'layout' && hit?.kind !== 'global') continue;
+      const routes = entries.get(file) ?? [];
+      for (const route of knownRoutes()) {
+        if ((hit.kind === 'global' || routeUnder(route.path, hit.route)) && !routes.some((r) => r.path === route.path)) routes.push(route);
+      }
+      if (routes.length) entries.set(file, routes);
+    }
+  }
+
   if (cfg.detect.imports && toTrace.length > 0 && entries.size > 0) {
     const extraRoots = new Set<string>();
     for (const file of toTrace) {
@@ -148,17 +173,13 @@ export async function mapChangesToRoutes(input: MappingInput): Promise<MappingRe
       notes.push(`Import graph limited to ${MAX_GRAPH_FILES} of ${universe.length} source files.`);
       universe = universe.slice(0, MAX_GRAPH_FILES);
     }
-    const configFiles = ['tsconfig.json', 'jsconfig.json'].map((f) => (dirRel ? `${dirRel}/${f}` : f));
     const packageJsons = headFiles.filter((f) => f.endsWith('package.json') && !f.includes('node_modules/')).slice(0, 300);
-    const contents = await input.readFiles([...universe, ...configFiles, ...packageJsons]);
+    const contents = await input.readFiles([...universe, ...packageJsons]);
 
     const aliases: Record<string, string> = {};
     const appPackageJson = contents.get(dirRel ? `${dirRel}/package.json` : 'package.json');
     if (appPackageJson) Object.assign(aliases, aliasesFromPackageImports(appPackageJson, dirRel));
-    for (const cf of configFiles) {
-      const text = contents.get(cf);
-      if (text) Object.assign(aliases, aliasesFromTsconfig(text, dirRel));
-    }
+    Object.assign(aliases, await tsconfigAliases(input.readFiles, dirRel));
     for (const [key, target] of Object.entries(cfg.detect.aliases)) {
       aliases[key] = path.posix.normalize(path.posix.join(dirRel || '.', target)) + (target.endsWith('/') ? '/' : '');
     }
@@ -196,16 +217,6 @@ export async function mapChangesToRoutes(input: MappingInput): Promise<MappingRe
     }
   }
 
-  const knownRoutes = (): ResolvedRoute[] => {
-    const all = new Map<string, ResolvedRoute>();
-    for (const r of cfg.routes) all.set(r.path, r);
-    for (const p of [...conventionRoutes].sort((a, b) => a.split('/').length - b.split('/').length || a.localeCompare(b))) {
-      if (!all.has(p)) all.set(p, routeFor(p));
-    }
-    if (all.size === 0) all.set('/', routeFor('/'));
-    return [...all.values()];
-  };
-
   for (const { file, scope } of layoutChanged) {
     for (const route of knownRoutes().filter((r) => routeUnder(r.path, scope))) {
       addHit(route, `layout ${file} wraps ${scope === '/' ? 'every route' : `${scope}/*`}`, 'medium');
@@ -233,6 +244,33 @@ export async function mapChangesToRoutes(input: MappingInput): Promise<MappingRe
     globalFiles: globalChanged,
     notes,
   };
+}
+
+/**
+ * Aliases from tsconfig.json / jsconfig.json in the app directory and every config they reference
+ * or extend (e.g. Vite's tsconfig.app.json). Configs closer to the app directory win.
+ */
+export async function tsconfigAliases(readFiles: (paths: string[]) => Promise<Map<string, string>>, dirRel: string): Promise<Record<string, string>> {
+  const aliases: Record<string, string> = {};
+  const seen = new Set<string>();
+  let queue = ['tsconfig.json', 'jsconfig.json'].map((f) => (dirRel ? `${dirRel}/${f}` : f));
+  for (let depth = 0; depth < 6 && queue.length > 0; depth++) {
+    const batch = queue.filter((f) => !seen.has(f));
+    for (const f of batch) seen.add(f);
+    queue = [];
+    const contents = await readFiles(batch);
+    for (const file of batch) {
+      const text = contents.get(file);
+      if (!text) continue;
+      const parsed = parseJsonc(text);
+      if (!parsed || typeof parsed !== 'object') continue;
+      for (const [key, target] of Object.entries(aliasesFromTsconfig(parsed, path.posix.dirname(file)))) {
+        if (!(key in aliases)) aliases[key] = target;
+      }
+      queue.push(...tsconfigLinks(parsed, file));
+    }
+  }
+  return aliases;
 }
 
 async function workingTreeFiles(repo: string): Promise<string[]> {

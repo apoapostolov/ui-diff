@@ -171,19 +171,69 @@ export function findEntries(
   return found;
 }
 
-function stripJsonComments(text: string): string {
-  return text.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:"'])\/\/.*$/gm, '$1').replace(/,(\s*[}\]])/g, '$1');
+/**
+ * Parses JSON with comments and trailing commas (tsconfig/jsconfig). Comments are only recognised
+ * outside strings, so values such as `"**\/*.ts"` or `"@/*"` survive. Returns undefined when invalid.
+ */
+export function parseJsonc(text: string): unknown {
+  let out = '';
+  let inString = false;
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (inString) {
+      out += ch;
+      if (ch === '\\' && i + 1 < text.length) out += text[++i];
+      else if (ch === '"') inString = false;
+      continue;
+    }
+    if (ch === '"') {
+      inString = true;
+      out += ch;
+    } else if (ch === '/' && text[i + 1] === '/') {
+      while (i < text.length && text[i] !== '\n') i++;
+      out += '\n';
+    } else if (ch === '/' && text[i + 1] === '*') {
+      const end = text.indexOf('*/', i + 2);
+      i = end === -1 ? text.length : end + 1;
+    } else {
+      out += ch;
+    }
+  }
+  try {
+    return JSON.parse(out.replace(/,(\s*[}\]])/g, '$1'));
+  } catch {
+    return undefined;
+  }
+}
+
+interface TsconfigJson {
+  compilerOptions?: { baseUrl?: string; paths?: Record<string, string[]> };
+  references?: Array<{ path?: string }>;
+  extends?: string | string[];
+}
+
+/** Repo-relative tsconfig files a config points to: project `references` and relative `extends`. */
+export function tsconfigLinks(parsed: unknown, fileRel: string): string[] {
+  const config = (parsed ?? {}) as TsconfigJson;
+  const dir = path.posix.dirname(fileRel);
+  const out: string[] = [];
+  const add = (target: string) => {
+    let file = path.posix.normalize(path.posix.join(dir, target));
+    if (!file.endsWith('.json')) file = path.posix.join(file, 'tsconfig.json');
+    if (!file.startsWith('..') && !out.includes(file)) out.push(file);
+  };
+  for (const ref of Array.isArray(config.references) ? config.references : []) if (typeof ref?.path === 'string') add(ref.path);
+  for (const ext of [config.extends ?? []].flat()) {
+    if (typeof ext === 'string' && (ext.startsWith('./') || ext.startsWith('../'))) add(ext.endsWith('.json') ? ext : `${ext}.json`);
+  }
+  return out;
 }
 
 /** Turns tsconfig/jsconfig `paths` into alias prefixes. Only `prefix/*` and exact patterns are supported. */
-export function aliasesFromTsconfig(text: string, configDirRel: string): Record<string, string> {
+export function aliasesFromTsconfig(text: string | unknown, configDirRel: string): Record<string, string> {
   const aliases: Record<string, string> = {};
-  let parsed: { compilerOptions?: { baseUrl?: string; paths?: Record<string, string[]> } };
-  try {
-    parsed = JSON.parse(stripJsonComments(text));
-  } catch {
-    return aliases;
-  }
+  const parsed = (typeof text === 'string' ? parseJsonc(text) : text) as TsconfigJson | undefined;
+  if (!parsed || typeof parsed !== 'object') return aliases;
   const baseUrl = parsed.compilerOptions?.baseUrl ?? '.';
   const base = path.posix.normalize(path.posix.join(configDirRel || '.', baseUrl));
   for (const [key, targets] of Object.entries(parsed.compilerOptions?.paths ?? {})) {

@@ -113,6 +113,10 @@ const DiffSchema = z
     maxFocusCrops: z.number().int().min(0).max(6).default(2),
     compositeMaxWidth: z.number().int().min(600).default(2400),
     highlightColor: z.string().default('#FF0080'),
+    alignShifts: z
+      .boolean()
+      .default(true)
+      .describe('Match content that only moved up or down (e.g. below a taller hero) and report it as shifted instead of changed'),
   })
   .strict();
 
@@ -140,6 +144,7 @@ const AuthSchema = z
 const MotionSchema = z
   .object({
     enabled: z.boolean().default(false),
+    all: z.boolean().default(false).describe('Record clips for routes without visual changes too (same as --motion-all)'),
     format: z.enum(['gif', 'webm', 'gif+webm']).default('gif'),
     durationMs: z.number().int().min(500).max(15000).default(3000),
     fps: z.number().int().min(2).max(30).default(10),

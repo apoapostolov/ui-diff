@@ -148,6 +148,7 @@ function motionSection(report: Report, opts: RenderOptions): string[] {
       continue;
     }
     if (clip.gif) out.push(img(opts.link(clip.gif), `${clip.route.path} motion: before and after`), '');
+    for (const w of clip.warnings ?? []) out.push(`> ⚠️ ${escapeText(w)}`, '');
     const links = imagesEnabled
       ? [clip.webm?.base && `[before.webm](${opts.link(clip.webm.base)})`, clip.webm?.head && `[after.webm](${opts.link(clip.webm.head)})`].filter(Boolean)
       : [];

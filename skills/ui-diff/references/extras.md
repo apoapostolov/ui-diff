@@ -46,9 +46,12 @@ Steps: `hover`, `click`, `focus`, `press` (key), `fill` + `value`, `scroll` (px 
 does not exist on one side (e.g. a new control) is skipped there and noted in the comment.
 `fromNavigation: true` starts recording before the page loads (entrance animations).
 `--motion` on the CLI records routes that declare `motion`; if none do, it records page load plus
-`motion.steps` for every captured route. `format`: `gif` (default), `webm` or `gif+webm`.
-Animations run normally here (no freezing, no fixed clock); GIFs are 10 fps and downscaled to
-keep PR comments light.
+`motion.steps` for every captured route. Routes without a visual change are skipped (listed in
+`motionSkipped`); `--motion-all` or `motion.all: true` records them too. `format`: `gif` (default),
+`webm` or `gif+webm`. Animations run normally here (no freezing, no fixed clock, and
+`prefers-reduced-motion: no-preference` even though static captures use `reduce`); GIFs are 10 fps
+and downscaled to keep PR comments light. Each clip reports its distinct frame count per side
+(`frames`); a clip with a single frame gets a "no motion detected" warning.
 
 ## Design-token audit
 
@@ -62,7 +65,11 @@ ui-diff run --pr 12 --tokens src/styles/tokens.css,design/tokens.json
 
 Token files: W3C design tokens (`$value`/`$type`, `{alias}` references, typography composites),
 Style Dictionary (`value`/`type`), plain or Tailwind-style nested JSON, and CSS custom properties
-(`--name: value`, `var()` references resolved, every theme block read). Tokens are classified as
+(`--name: value`, `var()` references resolved, every theme block read), and StyleX token files
+(`*.stylex.ts` with `defineVars`, `defineConsts` or `createTheme`; read statically, never executed:
+literal strings and numbers only, conditional values such as `{ default, '@media …' }` all
+allowed). With no files configured, `tokens.enabled` (or `--tokens auto`) looks for `*.stylex.ts`
+token files and `tokens.json`/`tokens.css` style files in the app. Tokens are classified as
 color, spacing, radius, font size, font weight, font family or line height from `$type`, their
 name and their value. A base unit token named `--spacing` (Tailwind v4) allows multiples of it.
 

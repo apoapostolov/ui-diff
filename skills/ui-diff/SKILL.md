@@ -72,7 +72,7 @@ an all-clear.
 
 ```bash
 node "$SKILL/bin/ui-diff.mjs" run --pr <n> [--routes "/,/pricing"] [--viewports desktop,mobile] [--themes light,dark] \
-  [--variants hero=1..4] [--motion] [--tokens path/to/tokens.json] [--a11y]
+  [--variants hero=1..4] [--motion | --motion-all] [--tokens path/to/tokens.json | auto] [--a11y]
 ```
 
 In one go it creates git worktrees for base (the merge base) and head, links or installs
@@ -109,8 +109,10 @@ designer or PM who will not read the code:
 ```
 
 Guidelines: lead "worth a look" with likely-unintended changes (a page changed without its files
-changing, breakage at one viewport, new a11y issues, off-token values). Explain large percentages
-caused by content shifting down rather than calling everything changed. Say "changed", not
+changing, breakage at one viewport, new a11y issues, off-token values). Content that only moved
+(a taller hero pushing sections down) is matched row by row and reported as "shifted down Npx"
+(`diff.shifted` in `report.json`); it is not in the changed percentage, so mention the shift
+without calling the moved sections changed. Say "changed", not
 "intentionally changed". Keep it proportional: a one-color tweak gets one bullet. If you cannot
 view images, write from `report.json` and say the screenshots were not reviewed.
 
@@ -151,8 +153,8 @@ After a PR closes, `node "$SKILL/bin/ui-diff.mjs" prune --closed` removes its im
 | Feature | Enable | What you get |
 |---|---|---|
 | Variant compare | `--variants hero=1..4` or `routes[].variants` | Head captured once per `?hero=` value, shown side by side in one table with tick boxes reviewers use to pick. |
-| Motion clips | `--motion` or `motion.enabled` + `routes[].motion.steps` | Short before/after GIF (and optional WebM) of a scripted hover/click/scroll, for transitions screenshots miss. |
-| Token audit | `--tokens tokens.json` or `tokens.enabled` | Computed colors, spacing, radii and type in changed areas that match no token (JSON or CSS variables), with selectors and the nearest token. |
+| Motion clips | `--motion` or `motion.enabled` + `routes[].motion.steps` | Short before/after GIF (and optional WebM) of a scripted hover/click/scroll, for transitions screenshots miss. Only routes with a visual change unless `--motion-all`; a single-frame clip is flagged "no motion detected". |
+| Token audit | `--tokens tokens.json` or `tokens.enabled` | Computed colors, spacing, radii and type in changed areas that match no token (JSON, CSS variables or StyleX `*.stylex.ts`; `--tokens auto` finds them), with selectors and the nearest token. |
 | Protected previews | `--base-url/--head-url` + `auth` | Captures behind Vercel Authentication and similar, with credentials from env vars sent only to the preview origin. |
 | Accessibility delta | `--a11y` or `a11y.enabled` | axe-core on both sides; only new and fixed issues (contrast, labels, focus), plus tab-order changes. |
 

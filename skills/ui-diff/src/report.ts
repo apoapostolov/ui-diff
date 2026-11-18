@@ -27,11 +27,22 @@ export interface CaptureResult {
     sizeBefore: [number, number];
     sizeAfter: [number, number];
     sizeChanged: boolean;
+    /** Content that only moved vertically (CSS px; dy = after − before). Not counted in ratio. */
+    shifted?: ShiftedRun[];
+    /** Height (CSS px) of base content with no counterpart on head. */
+    removedHeight?: number;
   };
   /** Paths relative to the output directory. */
   images: { base?: string; head?: string; diff?: string; compare?: string; focus: string[] };
   warnings: string[];
   truncated: boolean;
+}
+
+export interface ShiftedRun {
+  beforeY: number;
+  afterY: number;
+  height: number;
+  dy: number;
 }
 
 export interface VariantGroup {
@@ -52,6 +63,9 @@ export interface MotionResult {
   steps: string[];
   gif?: string;
   webm?: { base?: string; head?: string };
+  /** Distinct frames recorded per side; 1 means nothing moved. */
+  frames?: { base: number; head: number };
+  warnings?: string[];
   error?: string;
 }
 
@@ -95,6 +109,8 @@ export interface Report {
   captures: CaptureResult[];
   variants: VariantGroup[];
   motion: MotionResult[];
+  /** Routes whose motion clip was skipped because no capture of them changed (use --motion-all to record anyway). */
+  motionSkipped?: string[];
   tokens?: TokenReport;
   a11y?: A11yReport;
   warnings: string[];
@@ -125,6 +141,20 @@ function sizeNote(c: CaptureResult): string | undefined {
   return `page size ${bw}×${bh} → ${aw}×${ah}px`;
 }
 
+function px(n: number): string {
+  return `${Math.abs(n)}px`;
+}
+
+/** "content shifted down 60px" — moved-but-identical content, reported apart from real changes. */
+export function shiftNote(c: CaptureResult): string | undefined {
+  const runs = c.diff?.shifted ?? [];
+  if (runs.length === 0) return undefined;
+  const moves = [...new Set(runs.map((r) => r.dy))];
+  const words = moves.slice(0, 3).map((dy) => `${dy > 0 ? 'down' : 'up'} ${px(dy)}`);
+  const what = runs.length === 1 ? 'content' : `${runs.length} sections`;
+  return `${what} shifted ${words.join(', ')}${moves.length > 3 ? ', …' : ''} (unchanged, not counted)`;
+}
+
 export function describeCapture(c: CaptureResult): string {
   if (c.status === 'error') return `capture failed: ${c.error ?? 'unknown error'}`;
   if (c.status === 'added') return 'new page (no base version)';
@@ -132,6 +162,9 @@ export function describeCapture(c: CaptureResult): string {
   if (!c.diff) return '';
   const parts = [`${pct(c.diff.ratio)} of pixels changed`];
   if (c.diff.regions.length) parts.push(`${c.diff.regions.length} area${c.diff.regions.length === 1 ? '' : 's'}`);
+  const shift = shiftNote(c);
+  if (shift) parts.push(shift);
+  if (c.diff.removedHeight) parts.push(`${c.diff.removedHeight}px of content removed`);
   const size = sizeNote(c);
   if (size) parts.push(size);
   return parts.join(' · ');
@@ -189,6 +222,9 @@ export function autoSummary(report: Report): string {
   if (cut.length) lines.push(`- ⚠️ ${cut.length} capture${cut.length === 1 ? '' : 's'} only cover the top of the page (capture.maxHeight); changes further down were not compared.`);
   if (report.variants.length) lines.push(`- ${report.variants.length} variant set${report.variants.length === 1 ? '' : 's'} to choose from below.`);
   if (report.motion.length) lines.push(`- ${report.motion.length} motion clip${report.motion.length === 1 ? '' : 's'} recorded for interactions static screenshots miss.`);
+  const still = report.motion.filter((m) => m.warnings?.some((w) => w.startsWith('no motion detected')));
+  if (still.length) lines.push(`- No motion detected in ${still.map((m) => `\`${m.route.path}\``).join(', ')} (single-frame clip).`);
+  if (report.motionSkipped?.length) lines.push(`- Motion not recorded for unchanged routes: ${report.motionSkipped.map((r) => `\`${r}\``).join(', ')}.`);
   if (report.detect?.skippedRoutes.length) lines.push(`- Not captured (over the route limit): ${report.detect.skippedRoutes.map((r) => `\`${r}\``).join(', ')}.`);
   if (report.detect?.needsExample.length) lines.push(`- Not captured (dynamic routes need example values): ${report.detect.needsExample.map((n) => `\`${n.route}\``).join(', ')}.`);
   return lines.join('\n');

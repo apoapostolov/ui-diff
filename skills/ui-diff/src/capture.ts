@@ -114,7 +114,8 @@ export class CaptureSession {
 
   async newContext(viewport: ViewportConfig, theme: ThemeConfig | undefined, extra: Partial<BrowserContextOptions> = {}, motion = false): Promise<BrowserContext> {
     const { cfg } = this.opts;
-    const context = await this.browser.newContext({ ...contextOptions(viewport, theme, cfg, motion), ...extra });
+    // Motion clips always run with prefers-reduced-motion: no-preference; static captures may stay reduced.
+    const context = await this.browser.newContext({ ...contextOptions(viewport, theme, cfg, motion), ...extra, ...(motion ? { reducedMotion: 'no-preference' as const } : {}) });
     const fixed = cfg.capture.fixedTime;
     if (fixed && !motion) {
       const instant = fixed === 'run-start' ? this.opts.runStart : new Date(fixed);

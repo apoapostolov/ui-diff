@@ -54,7 +54,7 @@ root", and `..` is allowed (`../../packages/ui/**`). Globs support `**`, `*`, `?
 | `startCommand` | — | Starts the app. `{port}` is replaced with a free port; `PORT` is also set. Required for local (worktree) runs. |
 | `baseUrl` | `http://127.0.0.1:{port}` | Where the started app listens. |
 | `buildCommand` | — | Runs before `startCommand` (e.g. `npm run build` + `startCommand: "npm start"`). |
-| `install` | `"auto"` | `"auto"`: if the lockfile matches your checkout, link your installed `node_modules` (caches such as `.vite`/`.cache` are not shared); otherwise run the lockfile's install (`npm ci`, `pnpm install --frozen-lockfile`, `yarn install --frozen-lockfile`, `bun install`). A string runs that command; `false` skips. If the app fails with linked dependencies, ui-diff retries with a clean install. |
+| `install` | `"auto"` | `"auto"`: if the lockfile matches your checkout, link your installed `node_modules` (caches such as `.vite`/`.cache` are not shared); otherwise run the lockfile's install once (`npm ci`, `pnpm install --frozen-lockfile`, `yarn install --frozen-lockfile`, `bun install`). Lockfiles are compared by content hash, ignoring line endings and trailing whitespace; when base and head share a lockfile that differs from your checkout, one side installs and the other links to it. A string runs that command; `false` skips. If the app fails with linked dependencies, ui-diff retries with a clean install. |
 | `cwd` | `"."` | Directory (relative to the config) where commands run. |
 | `readyPath` | `"/"` | Polled until it answers with a status below 500. |
 | `startTimeoutMs` | `120000` | |
@@ -137,6 +137,7 @@ assets do not differ between sides.
 | `focusPadding` | `32` | CSS px around each crop. |
 | `compositeMaxWidth` | `2400` | Composites wider than this are downscaled. |
 | `highlightColor` | `#FF0080` | |
+| `alignShifts` | `true` | Matches pixel rows that only moved up or down (a taller hero pushing sections down). Moved content is reported as `shifted` (CSS px, `dy` = after − before) and kept out of the changed percentage; a blue band on the diff's left edge marks it. |
 
 ## Publishing and the comment
 

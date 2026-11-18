@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { mkdirSync, renameSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import gifenc from 'gifenc';
@@ -61,6 +62,38 @@ export function resample(frames: RawFrame[], fps: number, durationMs: number): n
     picks.push(sorted[cursor].i);
   }
   return picks;
+}
+
+/**
+ * Number of visually distinct frames (capped at `cap`). The screencast only sends frames on repaint,
+ * so a still page yields one; byte-identical frames are skipped before decoding.
+ */
+export function distinctFrames(frames: RawFrame[], cap = 3): number {
+  const byBytes = new Map<string, Buffer>();
+  for (const f of frames) {
+    const key = createHash('sha1').update(f.data).digest('base64');
+    if (!byBytes.has(key)) byBytes.set(key, f.data);
+  }
+  if (byBytes.size <= 1) return byBytes.size;
+  const seen = new Set<string>();
+  for (const data of byBytes.values()) {
+    try {
+      seen.add(createHash('sha1').update(decodePng(data).data).digest('base64'));
+    } catch {
+      seen.add(`raw:${seen.size}`);
+    }
+    if (seen.size >= cap) break;
+  }
+  return seen.size;
+}
+
+/** Report warning for clips in which nothing moved. */
+export function motionWarning(frames: { base: number; head: number }): string | undefined {
+  const still = (n: number) => n <= 1;
+  if (still(frames.base) && still(frames.head)) return 'no motion detected: the clip has a single frame on both sides (nothing animated during these steps)';
+  if (still(frames.head)) return 'no motion detected on head (single frame); base animates';
+  if (still(frames.base)) return 'no motion detected on base (single frame); head animates';
+  return undefined;
 }
 
 export interface MotionClip {

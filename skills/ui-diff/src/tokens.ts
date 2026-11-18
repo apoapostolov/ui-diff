@@ -3,6 +3,7 @@ import path from 'node:path';
 import type { TokenProperty } from './config.js';
 import { intersects, type Box } from './image.js';
 import { UiDiffError } from './log.js';
+import { isStylexTokenSource, parseStylexTokens } from './stylex.js';
 
 export type RGBAValue = [number, number, number, number];
 export type TokenCategory = 'color' | 'spacing' | 'radius' | 'fontSize' | 'fontWeight' | 'fontFamily' | 'lineHeight';
@@ -232,6 +233,33 @@ export function parseCssTokens(css: string, source: string): RawToken[] {
   return out;
 }
 
+const SCRIPT_EXTENSIONS = new Set(['.ts', '.tsx', '.mts', '.cts', '.js', '.jsx', '.mjs', '.cjs']);
+const TOKEN_FILE = /(?:^|\/)(?:design-)?tokens?(?:\.[\w-]+)?\.(?:json|css)$|\.tokens\.json$/i;
+const STYLEX_FILE = /\.stylex\.(?:[cm]?[jt]s|[jt]sx)$/i;
+const SKIP_DIR = /(?:^|\/)(?:node_modules|dist|build|out|coverage|\.next|\.ui-diff[^/]*|test|tests|__tests__|fixtures?|examples?)\//i;
+
+/**
+ * Finds design-token files among repository paths (relative to `dir`): StyleX `*.stylex.ts`
+ * files that call defineVars/defineConsts, and tokens.json / tokens.css style files.
+ */
+export function detectTokenFiles(dir: string, files: string[], max = 12): string[] {
+  const stylex: string[] = [];
+  const plain: string[] = [];
+  for (const rel of files) {
+    if (SKIP_DIR.test(rel)) continue;
+    if (STYLEX_FILE.test(rel)) {
+      try {
+        if (isStylexTokenSource(readFileSync(path.join(dir, rel), 'utf8'))) stylex.push(rel);
+      } catch {
+        // unreadable
+      }
+    } else if (TOKEN_FILE.test(rel)) {
+      plain.push(rel);
+    }
+  }
+  return [...stylex.sort(), ...plain.sort()].slice(0, max);
+}
+
 export function loadTokenFiles(files: string[]): RawToken[] {
   const raw: RawToken[] = [];
   for (const file of files) {
@@ -242,7 +270,11 @@ export function loadTokenFiles(files: string[]): RawToken[] {
       throw new UiDiffError(`Token file not found: ${file}`);
     }
     const ext = path.extname(file).toLowerCase();
-    if (ext === '.json') {
+    if (SCRIPT_EXTENSIONS.has(ext)) {
+      const tokens = parseStylexTokens(text, file);
+      if (tokens.length === 0) throw new UiDiffError(`No StyleX tokens found in ${file}`, { hint: 'Script token files are read statically: point tokens.files at a file with stylex.defineVars({...}) literals.' });
+      raw.push(...tokens);
+    } else if (ext === '.json') {
       try {
         raw.push(...parseJsonTokens(JSON.parse(text), file));
       } catch (error) {

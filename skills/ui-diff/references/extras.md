@@ -71,7 +71,16 @@ literal strings and numbers only, conditional values such as `{ default, '@media
 allowed). With no files configured, `tokens.enabled` (or `--tokens auto`) looks for `*.stylex.ts`
 token files and `tokens.json`/`tokens.css` style files in the app. Tokens are classified as
 color, spacing, radius, font size, font weight, font family or line height from `$type`, their
-name and their value. A base unit token named `--spacing` (Tailwind v4) allows multiples of it.
+name and their value: long names (`--space-4`, `font.size.sm`, `--radius-md`) and common short
+ones (`--s-4`, `--sp-4`, `--fs-sm`, `--fw-bold`, `--ff-serif`, `--lh-tight`, `--r-md`) work, and
+any color value counts as a color token. When your names say nothing about the kind, map them:
+
+```json
+{ "tokens": { "categories": { "spacing": ["--gx-*"], "font-size": ["type.*"], "radius": ["corner.*"] } } }
+```
+
+A base unit token named `--spacing` (Tailwind v4) allows multiples of it. Kinds with no recognized
+tokens are not audited, and the comment and summary say so.
 
 During capture ui-diff records the computed styles of visible elements; colors are normalized in
 the browser, so `oklch()`, `color-mix()` and named colors compare correctly. The audit checks

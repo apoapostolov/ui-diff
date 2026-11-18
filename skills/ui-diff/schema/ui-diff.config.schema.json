@@ -1181,6 +1181,29 @@
             "type": "string"
           }
         },
+        "categories": {
+          "default": {},
+          "description": "Map token names to categories when their names do not say it, e.g. { \"spacing\": [\"--s-*\"], \"font-size\": [\"--fs-*\"] }",
+          "type": "object",
+          "propertyNames": {
+            "type": "string",
+            "enum": [
+              "color",
+              "spacing",
+              "radius",
+              "font-size",
+              "font-weight",
+              "font-family",
+              "line-height"
+            ]
+          },
+          "additionalProperties": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
         "ignoreSelectors": {
           "default": [],
           "type": "array",

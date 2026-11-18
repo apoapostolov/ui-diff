@@ -200,7 +200,7 @@ async function cmdRun(values: Values): Promise<void> {
     motion: r.motion.map((m) => ({ id: m.id, gif: m.gif, webm: m.webm, frames: m.frames, warnings: m.warnings, error: m.error })),
     motionSkipped: r.motionSkipped,
     a11y: r.a11y ? { new: r.a11y.added.length, fixed: r.a11y.fixed.length, focusChanges: r.a11y.focus.filter((f) => f.delta.changed).length } : undefined,
-    tokens: r.tokens ? { new: r.tokens.findings.filter((f) => f.isNew).length, existing: r.tokens.findings.filter((f) => !f.isNew).length } : undefined,
+    tokens: r.tokens ? { new: r.tokens.findings.filter((f) => f.isNew).length, existing: r.tokens.findings.filter((f) => !f.isNew).length, notAudited: r.tokens.skipped } : undefined,
     warnings: r.warnings,
     notCaptured: [...(r.detect?.skippedRoutes ?? []), ...(r.detect?.needsExample.map((n) => n.route) ?? [])],
     unmatchedFiles: r.detect?.unmatched ?? [],

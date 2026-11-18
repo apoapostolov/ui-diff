@@ -222,7 +222,13 @@ function tokenSection(report: Report, opts: RenderOptions): string[] {
   if (existing.length && (opts.compact ?? 0) < 2) {
     out.push(`<details><summary>${existing.length} off-token value${existing.length === 1 ? '' : 's'} that already existed on base</summary>`, '', ...table(existing, 15), '', '</details>', '');
   }
-  if (t.skipped.length) out.push(`<sub>Not audited (no matching tokens): ${t.skipped.join(', ')}. Audited the ${scope} of ${t.audited.length} capture${t.audited.length === 1 ? '' : 's'}.</sub>`, '');
+  if (t.skipped.length) {
+    out.push(
+      `**Not audited:** ${t.skipped.join(', ')}: no tokens of that kind were recognized in ${t.files.map(code).join(', ')}. Name them like \`--space-4\` / \`--font-size-sm\`, or map them with \`tokens.categories\`.`,
+      '',
+    );
+  }
+  out.push(`<sub>Audited the ${scope} of ${t.audited.length} capture${t.audited.length === 1 ? '' : 's'}.</sub>`, '');
   return out;
 }
 

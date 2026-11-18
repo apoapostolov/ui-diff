@@ -128,10 +128,13 @@ Posting writes to a shared PR and pushes a branch: show the user the summary and
 unless the request already said to post.
 
 ```bash
-node "$SKILL/bin/ui-diff.mjs" publish --pr <n> --dry-run   # lists uploads, writes .ui-diff/comment.md, touches nothing
+node "$SKILL/bin/ui-diff.mjs" publish --pr <n> --dry-run   # lists uploads, writes .ui-diff/comment.md, pushes and posts nothing
 node "$SKILL/bin/ui-diff.mjs" publish --pr <n>
 ```
 
+- Read the dry run's `publishable` and `problems`: if it says the repository is public, its
+  visibility is unknown or there is no GitHub remote, the real publish will stop there. Tell the
+  user; do not add `--allow-public-repo` or `--assume-private` on your own.
 - Images go to the orphan branch `ui-diff-assets` of the same repository (single commit, other PRs'
   files kept) and are linked as `https://github.com/<owner>/<repo>/raw/ui-diff-assets/…`, which
   renders only for people who can read the repo.

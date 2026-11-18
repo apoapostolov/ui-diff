@@ -197,7 +197,7 @@ export async function runPipeline(opts: RunOptions): Promise<RunOutcome> {
       if (tokenFiles.length) log.info(`auto-detected token files: ${tokenFiles.map((f) => path.relative(cfg.repoRoot, f)).join(', ')}`);
     }
     if (tokenFiles.length === 0) throw new UiDiffError('Token audit is enabled but no token files were configured or found', { hint: 'Set tokens.files in ui-diff.config.json or pass --tokens path/to/tokens.json (JSON, CSS or StyleX *.stylex.ts)' });
-    tokenSet = buildTokenSet(loadTokenFiles(tokenFiles), cfg.tokens.remBase);
+    tokenSet = buildTokenSet(loadTokenFiles(tokenFiles), cfg.tokens.remBase, cfg.tokens.categories);
     log.info(`loaded ${tokenSet.values.length} design tokens from ${tokenFiles.map((f) => path.relative(cfg.repoRoot, f)).join(', ')}`);
   }
 

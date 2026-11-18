@@ -328,14 +328,56 @@ export function categoryFor(name: string, value: string, type?: string): TokenCa
   if (/radius|radii|rounded|corner/.test(n) && dimension) return 'radius';
   if (/space|spacing|gap|margin|padding|inset|gutter|size|grid|layout|dimension|scale/.test(n) && dimension) return 'spacing';
   if (t === 'dimension' || t === 'spacing' || t === 'sizing') return dimension ? 'spacing' : undefined;
+  return abbreviatedCategory(n, dimension);
+}
+
+/**
+ * Short design-token names: --fs-sm, --fw-bold, --ff-serif, --lh-tight, --s-4 / --sp-4, --r-md.
+ * Single letters only count as the first segment, so "--s-4" is spacing but "--icon-s" is not.
+ */
+function abbreviatedCategory(normalizedName: string, dimension: boolean): TokenCategory | undefined {
+  const segments = normalizedName.split('-').filter(Boolean);
+  const head = segments[0];
+  const has = (...words: string[]) => segments.some((s) => words.includes(s));
+  if (has('fs', 'fsz') && dimension) return 'fontSize';
+  if (has('fw')) return 'fontWeight';
+  if (has('ff')) return dimension ? undefined : 'fontFamily';
+  if (has('lh')) return 'lineHeight';
+  if (dimension && (head === 'r' || has('rad', 'br'))) return 'radius';
+  if (dimension && (head === 's' || head === 'm' || head === 'p' || has('sp', 'spc', 'pad', 'mar', 'sz'))) return 'spacing';
   return undefined;
 }
 
-export function buildTokenSet(raw: RawToken[], remBase = 16): TokenSet {
+export type CategoryMap = Partial<Record<'color' | 'spacing' | 'radius' | 'font-size' | 'font-weight' | 'font-family' | 'line-height', string[]>>;
+
+const CATEGORY_KEYS: Record<keyof CategoryMap, TokenCategory> = {
+  color: 'color',
+  spacing: 'spacing',
+  radius: 'radius',
+  'font-size': 'fontSize',
+  'font-weight': 'fontWeight',
+  'font-family': 'fontFamily',
+  'line-height': 'lineHeight',
+};
+
+function nameMatches(name: string, pattern: string): boolean {
+  const re = new RegExp(`^${pattern.split('*').map((part) => part.replace(/[.+?^${}()|[\]\\]/g, '\\$&')).join('.*')}$`, 'i');
+  return re.test(name);
+}
+
+/** Category forced by `tokens.categories` (name globs such as "--s-*" or "space.*"), if any. */
+export function mappedCategory(name: string, categories: CategoryMap | undefined): TokenCategory | undefined {
+  for (const [key, patterns] of Object.entries(categories ?? {}) as Array<[keyof CategoryMap, string[]]>) {
+    if (patterns.some((p) => nameMatches(name, p))) return CATEGORY_KEYS[key];
+  }
+  return undefined;
+}
+
+export function buildTokenSet(raw: RawToken[], remBase = 16, categories?: CategoryMap): TokenSet {
   const values: TokenValue[] = [];
   let spacingUnit: number | undefined;
   for (const token of resolveReferences(raw)) {
-    const category = categoryFor(token.name, token.value, token.type);
+    const category = mappedCategory(token.name, categories) ?? categoryFor(token.name, token.value, token.type);
     if (!category) continue;
     const value: TokenValue = { name: token.name, raw: token.value, category };
     if (category === 'color') value.rgba = parseCssColor(token.value);

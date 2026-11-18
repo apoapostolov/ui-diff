@@ -181,6 +181,10 @@ const TokensSchema = z
     pxTolerance: z.number().min(0).max(4).default(0.5),
     remBase: z.number().positive().default(16),
     allow: z.array(z.string()).default([]).describe('Extra allowed values, e.g. "0px", "1px", "#ffffff"'),
+    categories: z
+      .partialRecord(z.enum(['color', 'spacing', 'radius', 'font-size', 'font-weight', 'font-family', 'line-height']), z.array(z.string()))
+      .default({})
+      .describe('Map token names to categories when their names do not say it, e.g. { "spacing": ["--s-*"], "font-size": ["--fs-*"] }'),
     ignoreSelectors: z.array(z.string()).default([]),
     maxElements: z.number().int().min(10).default(2500),
     maxFindings: z.number().int().min(1).default(40),

@@ -211,11 +211,12 @@ export function autoSummary(report: Report): string {
   }
   if (report.tokens) {
     const fresh = report.tokens.findings.filter((f) => f.isNew);
+    const notAudited = report.tokens.skipped.length ? ` Not audited (no tokens of that kind recognized): ${report.tokens.skipped.join(', ')}.` : '';
     if (fresh.length) {
       const top = fresh.slice(0, 3).map((f) => `${f.property} \`${f.value}\``).join(', ');
-      lines.push(`- Design tokens: ${fresh.length} new off-token value${fresh.length === 1 ? '' : 's'} (${top}).`);
+      lines.push(`- Design tokens: ${fresh.length} new off-token value${fresh.length === 1 ? '' : 's'} (${top}).${notAudited}`);
     } else {
-      lines.push('- Design tokens: no new off-token values in the changed areas.');
+      lines.push(`- Design tokens: no new off-token values in the changed areas.${notAudited}`);
     }
   }
   const cut = report.captures.filter((c) => c.truncated);

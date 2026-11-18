@@ -3,7 +3,7 @@ import { describe, it } from 'node:test';
 import { parseConfig } from '../../src/config.js';
 import { mapChangesToRoutes } from '../../src/detect.js';
 import type { ChangedFile } from '../../src/git.js';
-import { aliasesFromTsconfig, extractSpecifiers, resolveSpecifier } from '../../src/imports.js';
+import { aliasesFromPackageImports, aliasesFromTsconfig, extractSpecifiers, resolveSpecifier } from '../../src/imports.js';
 
 function reader(files: Record<string, string>) {
   return async (paths: string[]) => new Map(paths.filter((p) => p in files).map((p) => [p, files[p]]));
@@ -93,6 +93,7 @@ describe('imports', () => {
     assert.deepEqual(extractSpecifiers("import a from './a';\nimport type { B } from \"../b\";\nexport * from './c';\nconst d = import('./d');\nrequire('./e')", 'x.ts').sort(), ['../b', './a', './c', './d', './e']);
     assert.deepEqual(extractSpecifiers("@import 'base.css';\n.x { background: url(\"img/bg.png\") }", 'x.css').sort(), ['base.css', 'img/bg.png']);
     assert.deepEqual(extractSpecifiers('<link href="styles.css"><script src="/app.js"></script><a href="https://x.dev">', 'index.html').sort(), ['/app.js', 'styles.css']);
+    assert.deepEqual(extractSpecifiers("import { Hero } from '#/components/hero';\nconst a = <a href=\"#top\">top</a>;", 'x.tsx'), ['#/components/hero']);
   });
 
   it('resolves extensions, index files, TS-style .js imports and SCSS partials', () => {
@@ -108,5 +109,25 @@ describe('imports', () => {
   it('turns tsconfig paths into aliases', () => {
     const aliases = aliasesFromTsconfig('{ // comment\n "compilerOptions": { "baseUrl": "./", "paths": { "@/*": ["./src/*"], "@ui": ["../../packages/ui/index.ts"] } } }', 'apps/web');
     assert.deepEqual(aliases, { '@/': 'apps/web/src/', '@ui': 'packages/ui/index.ts' });
+  });
+
+  it('turns package.json subpath imports into aliases', () => {
+    const pkg = JSON.stringify({ imports: { '#/*': './src/*', '#ui': { types: './ui.d.ts', default: './src/ui/index.ts' }, '#ext/*': 'some-package/*', '#bad': './x/*' } });
+    assert.deepEqual(aliasesFromPackageImports(pkg, 'apps/web'), { '#/': 'apps/web/src/', '#ui': 'apps/web/src/ui/index.ts' });
+    assert.deepEqual(aliasesFromPackageImports('not json', ''), {});
+  });
+
+  it('maps TanStack Router pages through package.json # imports', async () => {
+    const cfg = parseConfig({}, { repoRoot: '/repo' });
+    const files: Record<string, string> = {
+      'package.json': JSON.stringify({ name: 'web', imports: { '#/*': './src/*' } }),
+      'src/routes/__root.tsx': 'export const Route = 1;',
+      'src/routes/_marketing/products.tsx': "import { Hero } from '#/components/hero';",
+      'src/routes/_marketing/index.tsx': "import { Footer } from '#/components/footer';",
+      'src/components/hero.tsx': 'export const Hero = 1;',
+      'src/components/footer.tsx': 'export const Footer = 1;',
+    };
+    const result = await mapChangesToRoutes({ cfg, changed: changed('src/components/hero.tsx'), headFiles: Object.keys(files), readFiles: reader(files) });
+    assert.deepEqual(result.routes.map((r) => r.route.path), ['/products']);
   });
 });

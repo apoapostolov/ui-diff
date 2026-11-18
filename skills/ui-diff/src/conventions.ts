@@ -61,6 +61,26 @@ export function inferFromPath(appRel: string): ConventionHit | undefined {
   }
   if (/^src\/app\.(?:html|css|pcss|scss)$/.test(p)) return { kind: 'global', framework: 'sveltekit', route: '/', dynamic: false };
 
+  // TanStack Router / Start file routes (src/routes, directories and flat dot notation)
+  m = /^src\/routes\/(.+)\.(?:tsx|jsx|ts|js)$/.exec(p);
+  if (m) {
+    const raw = m[1].replace(/\.lazy$/, '');
+    const parts = raw.split('/');
+    // "-" prefixed files and folders are excluded from routing; "+" files belong to SvelteKit.
+    if (parts.some((s) => s.startsWith('-') || s.startsWith('+')) || /\.(?:test|spec)$/.test(raw)) return undefined;
+    if (raw === '__root') return { kind: 'global', framework: 'tanstack-router', route: '/', dynamic: false };
+    const tokens = parts.flatMap((s) => s.split('.'));
+    const last = tokens[tokens.length - 1];
+    let kind: ConventionHit['kind'] = 'page';
+    if (last === 'route' || (last.startsWith('_') && last !== '_')) {
+      // route.tsx configures its folder; _layout.tsx is a pathless layout around its siblings.
+      kind = 'layout';
+      tokens.pop();
+    }
+    const segments = tokens.filter((t) => t && !t.startsWith('_') && !/^\(.*\)$/.test(t)).map((t) => t.replace(/_$/, ''));
+    return { kind, framework: 'tanstack-router', route: joinRoute(segments), dynamic: segments.some((s) => s.startsWith('$')) };
+  }
+
   // Nuxt / Vue file routing
   m = /^(?:app\/)?pages\/(.+)\.vue$/.exec(p);
   if (m) {

@@ -23,6 +23,11 @@ export function extractSpecifiers(source: string, file: string): string[] {
   const add = (s: string | undefined) => {
     if (s && !/^(?:https?:|data:|mailto:|#)/.test(s)) specs.add(s.split(/[?#]/)[0]);
   };
+  // Module specifiers may start with "#" (package.json subpath imports); in href/src that is an anchor.
+  const addModule = (s: string | undefined) => {
+    if (s?.startsWith('#') && s.length > 1) specs.add(s.split('?')[0]);
+    else add(s);
+  };
   const ext = path.posix.extname(file).toLowerCase();
   const patterns: RegExp[] = [];
   if (['.css', '.scss', '.sass', '.less'].includes(ext)) {
@@ -30,14 +35,16 @@ export function extractSpecifiers(source: string, file: string): string[] {
   } else if (ext === '.html' || ext === '.htm') {
     patterns.push(/\b(?:href|src)\s*=\s*["']([^"']+)["']/g);
   } else {
-    patterns.push(
+    const modules = [
       /\bimport\s+(?:type\s+)?(?:[\w*{}\s,$]+?\s+from\s+)?['"]([^'"]+)['"]/g,
       /\bexport\s+(?:type\s+)?[\w*{}\s,$]+?\s+from\s+['"]([^'"]+)['"]/g,
       /\bimport\(\s*['"]([^'"]+)['"]\s*\)/g,
       /\brequire\(\s*['"]([^'"]+)['"]\s*\)/g,
-      /@(?:import|use)\s+['"]([^'"]+)['"]/g,
-      /\b(?:href|src)\s*=\s*["']([^"'{}]+)["']/g,
-    );
+    ];
+    for (const re of modules) {
+      for (const match of source.matchAll(re)) addModule(match[1]);
+    }
+    patterns.push(/@(?:import|use)\s+['"]([^'"]+)['"]/g, /\b(?:href|src)\s*=\s*["']([^"'{}]+)["']/g);
   }
   for (const re of patterns) {
     for (const match of source.matchAll(re)) add(match[1]);
@@ -185,6 +192,37 @@ export function aliasesFromTsconfig(text: string, configDirRel: string): Record<
     const from = key.replace(/\*$/, '');
     const to = path.posix.normalize(path.posix.join(base, target.replace(/\*$/, '')));
     aliases[from] = key.endsWith('*') ? `${to.replace(/\/$/, '')}/` : to;
+  }
+  return aliases;
+}
+
+/**
+ * Turns package.json subpath `imports` (e.g. `"#/*": "./src/*"`) into alias prefixes. Conditional
+ * targets use `default`, then `import`, then the first string. Only trailing `*` patterns are supported.
+ */
+export function aliasesFromPackageImports(text: string, packageDirRel: string): Record<string, string> {
+  const aliases: Record<string, string> = {};
+  let parsed: { imports?: Record<string, unknown> };
+  try {
+    parsed = JSON.parse(text);
+  } catch {
+    return aliases;
+  }
+  const pick = (target: unknown): string | undefined => {
+    if (typeof target === 'string') return target;
+    if (Array.isArray(target)) return target.map(pick).find(Boolean);
+    if (target && typeof target === 'object') {
+      const t = target as Record<string, unknown>;
+      return pick(t.default) ?? pick(t.import) ?? Object.values(t).map(pick).find(Boolean);
+    }
+    return undefined;
+  };
+  for (const [key, value] of Object.entries(parsed.imports ?? {})) {
+    const target = pick(value);
+    if (!key.startsWith('#') || !target || !target.startsWith('./')) continue;
+    if (key.endsWith('*') !== target.endsWith('*')) continue;
+    const to = path.posix.normalize(path.posix.join(packageDirRel || '.', target.replace(/\*$/, '')));
+    aliases[key.replace(/\*$/, '')] = key.endsWith('*') ? `${to.replace(/\/$/, '')}/` : to;
   }
   return aliases;
 }

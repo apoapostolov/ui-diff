@@ -18,6 +18,16 @@ describe('routing conventions', () => {
     ['src/pages/index.astro', { kind: 'page', framework: 'astro', route: '/', dynamic: false }],
     ['app/routes/_index.tsx', { kind: 'page', framework: 'remix', route: '/', dynamic: false }],
     ['app/routes/blog.$slug.tsx', { kind: 'page', framework: 'remix', route: '/blog/$slug', dynamic: true }],
+    ['src/routes/index.tsx', { kind: 'page', framework: 'tanstack-router', route: '/', dynamic: false }],
+    ['src/routes/about.tsx', { kind: 'page', framework: 'tanstack-router', route: '/about', dynamic: false }],
+    ['src/routes/_marketing/products.tsx', { kind: 'page', framework: 'tanstack-router', route: '/products', dynamic: false }],
+    ['src/routes/_marketing/how-it-works/index.tsx', { kind: 'page', framework: 'tanstack-router', route: '/how-it-works', dynamic: false }],
+    ['src/routes/_marketing.tsx', { kind: 'layout', framework: 'tanstack-router', route: '/', dynamic: false }],
+    ['src/routes/posts/route.tsx', { kind: 'layout', framework: 'tanstack-router', route: '/posts', dynamic: false }],
+    ['src/routes/posts.index.tsx', { kind: 'page', framework: 'tanstack-router', route: '/posts', dynamic: false }],
+    ['src/routes/posts/$postId.lazy.tsx', { kind: 'page', framework: 'tanstack-router', route: '/posts/$postId', dynamic: true }],
+    ['src/routes/(auth)/login.tsx', { kind: 'page', framework: 'tanstack-router', route: '/login', dynamic: false }],
+    ['src/routes/__root.tsx', { kind: 'global', framework: 'tanstack-router', route: '/', dynamic: false }],
     ['index.html', { kind: 'page', framework: 'static', route: '/', dynamic: false }],
     ['about.html', { kind: 'page', framework: 'static', route: '/about.html', dynamic: false }],
     ['public/docs/index.html', { kind: 'page', framework: 'static', route: '/docs/', dynamic: false }],
@@ -30,6 +40,9 @@ describe('routing conventions', () => {
     assert.equal(inferFromPath('pages/api/users.ts'), undefined);
     assert.equal(inferFromPath('app/_components/page.tsx'), undefined);
     assert.equal(inferFromPath('src/components/Button.tsx'), undefined);
+    assert.equal(inferFromPath('src/routes/-components/Hero.tsx'), undefined);
+    assert.equal(inferFromPath('src/routes/posts/-utils.ts'), undefined);
+    assert.equal(inferFromPath('src/routes/+server.ts'), undefined);
   });
 
   it('checks layout scopes', () => {

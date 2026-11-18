@@ -4,7 +4,7 @@ import { resolveRoute, type ResolvedConfig, type ResolvedRoute } from './config.
 import { inferFromPath, routeUnder } from './conventions.js';
 import { changedFiles, defaultBaseRef, git, lsTree, mergeBase, readBlobs, revParse, type ChangedFile } from './git.js';
 import { firstMatch, matchAny } from './glob.js';
-import { addAssetMentions, aliasesFromTsconfig, buildReverseGraph, findEntries, isAssetFile, isSourceFile, type ResolveContext } from './imports.js';
+import { addAssetMentions, aliasesFromPackageImports, aliasesFromTsconfig, buildReverseGraph, findEntries, isAssetFile, isSourceFile, type ResolveContext } from './imports.js';
 import { log, UiDiffError } from './log.js';
 
 export type Confidence = 'high' | 'medium' | 'low';
@@ -153,6 +153,8 @@ export async function mapChangesToRoutes(input: MappingInput): Promise<MappingRe
     const contents = await input.readFiles([...universe, ...configFiles, ...packageJsons]);
 
     const aliases: Record<string, string> = {};
+    const appPackageJson = contents.get(dirRel ? `${dirRel}/package.json` : 'package.json');
+    if (appPackageJson) Object.assign(aliases, aliasesFromPackageImports(appPackageJson, dirRel));
     for (const cf of configFiles) {
       const text = contents.get(cf);
       if (text) Object.assign(aliases, aliasesFromTsconfig(text, dirRel));

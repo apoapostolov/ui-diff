@@ -39,7 +39,8 @@ git status --short
 
 - Look for `ui-diff.config.json` (repo root or the app's directory). If there is none, run
   `node "$SKILL/bin/ui-diff.mjs" init`, check the suggested `startCommand` and `routes`, and offer
-  to commit the file. `doctor` checks git, gh, the browser, the config and repo visibility.
+  to commit the file. `doctor` checks git, gh, the browser, the config and repo visibility: FAIL
+  blocks a run; WARN (no gh login, no remote) only matters for publishing or `--pr`.
 - **Posting to a PR:** pass `--pr <n>` so head is the pushed commit. Mention uncommitted or unpushed
   work, because it will not appear.
 - **Checking work in progress:** omit `--head`; the working tree (including uncommitted changes)

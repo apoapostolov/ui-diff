@@ -497,7 +497,9 @@ async function cmdDoctor(values: Values): Promise<void> {
         true,
       );
       const gh = await exec('gh', ['auth', 'status'], { allowFailure: true }).catch(() => ({ code: 1, stdout: '', stderr: 'gh not installed' }));
-      add('gh auth', gh.code === 0, gh.code === 0 ? 'authenticated' : (gh.stderr || gh.stdout).trim().split('\n')[0] ?? 'not authenticated');
+      // Only publish and --pr talk to GitHub, so a missing login is a WARN like the remote, not a broken setup.
+      const ghProblem = (gh.stderr || gh.stdout).trim().split('\n')[0] || 'not signed in';
+      add('gh auth', gh.code === 0, gh.code === 0 ? 'authenticated' : `${ghProblem}; only publish and --pr need it`, true);
       if (info && gh.code === 0) {
         const visibility = await repoVisibility(info);
         add('repo visibility', visibility === 'PRIVATE' || visibility === 'INTERNAL', visibility ?? 'unknown');

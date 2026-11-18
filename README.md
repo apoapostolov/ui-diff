@@ -26,10 +26,11 @@ directly.
 
 ## Quick start
 
-You need git, Node.js 20.10+ and the GitHub CLI signed in (`gh auth login`). On Windows, use WSL2.
+You need git and Node.js 20.10+. On Windows, use WSL2. The GitHub CLI (`gh auth login`) is only
+needed to publish: `ui-diff publish` and `--pr <number>`, which reads the pull request from GitHub.
 
 ```bash
-gh repo clone psychedelichip/ui-diff ~/src/ui-diff   # or: git clone git@github.com:psychedelichip/ui-diff.git ~/src/ui-diff
+git clone https://github.com/psychedelichip/ui-diff.git ~/src/ui-diff
 ~/src/ui-diff/install.sh --claude                   # Claude Code; Cursor reads it too. --codex for Codex
 alias ui-diff='node ~/src/ui-diff/skills/ui-diff/bin/ui-diff.mjs'
 
@@ -77,13 +78,14 @@ Extras, each behind a flag or config key:
 
 ## Install
 
-Requirements: macOS or Linux (on Windows, WSL2), git, Node.js 20.10+, and the GitHub CLI (`gh auth login`) to post
-comments. The first run installs the skill's npm dependencies and builds it (about a minute); the
-first capture downloads Playwright's Chromium (~150 MB) into `~/.cache/ms-playwright`. To use an
-installed Chrome instead, set `UI_DIFF_BROWSER_CHANNEL=chrome`.
+Requirements: macOS or Linux (on Windows, WSL2), git and Node.js 20.10+. The GitHub CLI signed in
+(`gh auth login`) is only needed to publish (`ui-diff publish` posts the comment with it) and for
+`--pr <number>`; local runs work without it. The first run installs the skill's npm dependencies
+and builds it (about a minute); the first capture downloads Playwright's Chromium (~150 MB) into
+`~/.cache/ms-playwright`. To use an installed Chrome instead, set `UI_DIFF_BROWSER_CHANNEL=chrome`.
 
 ```bash
-gh repo clone psychedelichip/ui-diff ~/src/ui-diff   # uses your gh login; or git clone over SSH
+git clone https://github.com/psychedelichip/ui-diff.git ~/src/ui-diff
 cd ~/src/ui-diff
 ```
 

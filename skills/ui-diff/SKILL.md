@@ -137,7 +137,8 @@ node "$SKILL/bin/ui-diff.mjs" publish --pr <n>
   reruns never stack comments, unchanged bodies are not re-sent, and ticked variant picks survive.
 - Exit code 3 means no push access (e.g. a fork): use `--no-upload` for a text-only comment, or
   `--no-comment` to upload and print the markdown without posting.
-- No PR yet: keep `.ui-diff/comment.md` and offer to post once the PR exists.
+- No PR yet: use `render` (or `publish --dry-run`) to produce the comment and offer to post once
+  the PR exists.
 
 ## 6. Wrap up
 

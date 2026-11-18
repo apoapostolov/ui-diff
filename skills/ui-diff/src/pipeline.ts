@@ -8,7 +8,7 @@ import { detectChanges, resolveBaseRef, type DetectResult } from './detect.js';
 import { composeCompare, diffPngs, focusBoxes } from './diff.js';
 import { git, gitCommonDir, mergeBase, revParse } from './git.js';
 import { COLORS, composeRow, readPng, resizeToWidth, writePng } from './image.js';
-import { log, UiDiffError, writeRedacted } from './log.js';
+import { log, noteAfterError, UiDiffError, writeRedacted } from './log.js';
 import { renderComment } from './markdown.js';
 import { distinctFrames, encodeSideBySideGif, motionWarning, moveFile, recordFrames, writeFile, type RawFrame } from './motion.js';
 import { realpathIfExists } from './paths.js';
@@ -48,7 +48,8 @@ export interface RunOutcome {
 }
 
 const FAILED_MARKER = 'last-run-failed.json';
-const OUTPUT_ENTRIES = ['captures', 'diff', 'compare', 'variants', 'motion', 'styles', 'report.json', 'comment.local.md', 'comment.md', 'summary.auto.md', FAILED_MARKER];
+// comment.preview.md comes from `render`; a new successful run makes it stale, so it is dropped with the rest.
+const OUTPUT_ENTRIES = ['captures', 'diff', 'compare', 'variants', 'motion', 'styles', 'report.json', 'comment.local.md', 'comment.md', 'comment.preview.md', 'summary.auto.md', FAILED_MARKER];
 
 export interface RunFailure {
   failedAt: string;
@@ -97,10 +98,13 @@ export function commitOutDir(stage: string, outDir: string): void {
   rmSync(old, { recursive: true, force: true });
 }
 
-/** Leaves a note next to the kept report so `render` and `publish` can say it is not from the latest run. */
-export function markRunFailed(outDir: string, error: unknown): void {
+/**
+ * Leaves a note next to the kept report so `render` and `publish` can say it is not from the latest run.
+ * Returns the warning to show the user, if a report was kept.
+ */
+export function markRunFailed(outDir: string, error: unknown): string | undefined {
   const reportFile = path.join(outDir, 'report.json');
-  if (!existsSync(reportFile)) return;
+  if (!existsSync(reportFile)) return undefined;
   let previousReport: string | undefined;
   try {
     previousReport = (JSON.parse(readFileSync(reportFile, 'utf8')) as Report).createdAt;
@@ -110,7 +114,7 @@ export function markRunFailed(outDir: string, error: unknown): void {
   const failure: RunFailure = { failedAt: new Date().toISOString(), error: error instanceof Error ? error.message : String(error), previousReport };
   writeRedacted(path.join(outDir, FAILED_MARKER), `${JSON.stringify(failure, null, 2)}\n`);
   const shown = path.relative(process.cwd(), outDir);
-  log.warn(`kept the previous report in ${shown.startsWith('..') ? outDir : shown || '.'} (from ${previousReport ?? 'an earlier run'}); it does not include this run`);
+  return `kept the previous report in ${shown.startsWith('..') ? outDir : shown || '.'} (from ${previousReport ?? 'an earlier run'}); it does not include this run`;
 }
 
 export function lastRunFailure(outDir: string): RunFailure | undefined {
@@ -202,7 +206,8 @@ export async function runPipeline(opts: RunOptions): Promise<RunOutcome> {
     return { ...outcome, reportFile: final(outcome.reportFile), previewFile: final(outcome.previewFile) };
   } catch (error) {
     rmSync(stage, { recursive: true, force: true });
-    markRunFailed(opts.outDir, error);
+    const kept = markRunFailed(opts.outDir, error);
+    if (kept) noteAfterError(error, kept);
     throw error;
   }
 }
@@ -294,7 +299,8 @@ async function runStaged(opts: RunOptions, finalDir: string): Promise<RunOutcome
     killAllServers();
     sides.cleanupSync();
     rmSync(outDir, { recursive: true, force: true });
-    markRunFailed(finalDir, 'interrupted');
+    const kept = markRunFailed(finalDir, 'interrupted');
+    if (kept) log.warn(kept);
     process.exit(130);
   };
   process.once('SIGINT', onSignal);

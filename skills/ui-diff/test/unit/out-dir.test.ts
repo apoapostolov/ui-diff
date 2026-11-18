@@ -20,6 +20,7 @@ describe('output directory staging', () => {
     writeFileSync(path.join(out, 'report.json'), JSON.stringify({ createdAt: '2026-01-01T00:00:00.000Z' }));
     writeFileSync(path.join(out, 'compare', 'home.png'), 'old image');
     writeFileSync(path.join(out, 'comment.md'), 'old comment');
+    writeFileSync(path.join(out, 'comment.preview.md'), 'old preview from render');
     writeFileSync(path.join(out, 'summary.md'), 'my summary');
     writeFileSync(path.join(out, 'logs', 'base-server.log'), 'old log');
     return out;
@@ -31,6 +32,7 @@ describe('output directory staging', () => {
     assert.equal(path.dirname(stage), out);
     assert.equal(readFileSync(path.join(out, 'report.json'), 'utf8'), JSON.stringify({ createdAt: '2026-01-01T00:00:00.000Z' }));
     assert.ok(existsSync(path.join(out, 'compare', 'home.png')));
+    assert.ok(existsSync(path.join(out, 'comment.preview.md')), 'the preview of the kept report stays until a run succeeds');
     assert.ok(!existsSync(path.join(out, 'logs')), 'logs belong to the latest run');
     rmSync(stage, { recursive: true, force: true });
   });
@@ -46,6 +48,7 @@ describe('output directory staging', () => {
     assert.deepEqual(readdirSync(path.join(out, 'compare')), ['about.png'], 'old images must not mix with new ones');
     assert.match(readFileSync(path.join(out, 'report.json'), 'utf8'), /2026-02-02/);
     assert.ok(!existsSync(path.join(out, 'comment.md')), 'the comment of the previous run is stale');
+    assert.ok(!existsSync(path.join(out, 'comment.preview.md')), 'an old render must not pass for the new result');
     assert.ok(!existsSync(path.join(out, 'last-run-failed.json')));
     assert.equal(readFileSync(path.join(out, 'summary.md'), 'utf8'), 'my summary');
     assert.deepEqual(readdirSync(out).filter((e) => e.startsWith('.')), []);
@@ -54,13 +57,13 @@ describe('output directory staging', () => {
   it('records a failure next to the kept report', () => {
     const out = previousRun('failed');
     assert.equal(lastRunFailure(out), undefined);
-    markRunFailed(out, new Error('base: server exited with code 3'));
+    assert.equal(markRunFailed(out, new Error('base: server exited with code 3')), `kept the previous report in ${out} (from 2026-01-01T00:00:00.000Z); it does not include this run`);
     const failure = lastRunFailure(out)!;
     assert.equal(failure.error, 'base: server exited with code 3');
     assert.equal(failure.previousReport, '2026-01-01T00:00:00.000Z');
     const empty = path.join(dir, 'never-ran');
     mkdirSync(empty);
-    markRunFailed(empty, new Error('boom'));
+    assert.equal(markRunFailed(empty, new Error('boom')), undefined);
     assert.equal(lastRunFailure(empty), undefined, 'nothing to warn about without a kept report');
   });
 

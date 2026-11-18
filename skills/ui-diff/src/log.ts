@@ -51,6 +51,18 @@ export const log = {
   },
 };
 
+const notesAfterError = new WeakMap<object, string[]>();
+
+/** A warning printed right after `error` (and its hint), so the real error is what the user sees first. */
+export function noteAfterError(error: unknown, note: string): void {
+  if (typeof error === 'object' && error !== null) notesAfterError.set(error, [...(notesAfterError.get(error) ?? []), note]);
+  else log.warn(note);
+}
+
+export function notesAfter(error: unknown): string[] {
+  return typeof error === 'object' && error !== null ? (notesAfterError.get(error) ?? []) : [];
+}
+
 export class UiDiffError extends Error {
   readonly hint?: string;
   readonly exitCode: number;

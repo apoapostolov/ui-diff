@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { appendFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -49,6 +49,8 @@ describe('a failed run keeps the previous report', { timeout: 180_000 }, () => {
 
   after(() => rmSync(dir, { recursive: true, force: true }));
 
+  const cli = (...args: string[]) => spawnSync(process.execPath, ['--import', import.meta.resolve('tsx'), path.join(skillRoot, 'src', 'cli.ts'), ...args], { cwd: repo, encoding: 'utf8' });
+
   it('swaps results only on success and says when the report is from an earlier run', async () => {
     const cfg = loadConfig(repo, repo);
     const outDir = path.join(repo, '.ui-diff');
@@ -58,21 +60,33 @@ describe('a failed run keeps the previous report', { timeout: 180_000 }, () => {
     const compare = path.join(outDir, first.report.captures[0].images.compare!);
     assert.ok(existsSync(compare));
     const kept = readFileSync(path.join(outDir, 'report.json'), 'utf8');
+    const preview = path.join(outDir, 'comment.preview.md');
+    assert.equal(cli('render').status, 0);
+    assert.ok(existsSync(preview));
 
-    await assert.rejects(runPipeline({ cfg: { ...cfg, startCommand: 'node -e "console.error(\'boom from the app\'); process.exit(3)"' }, outDir, base: baseSha, head: headSha }));
+    // A config whose app exits at once, kept out of git status like a local experiment would be.
+    writeFileSync(path.join(repo, 'broken.config.json'), JSON.stringify({ ...JSON.parse(readFileSync(path.join(repo, 'ui-diff.config.json'), 'utf8')), startCommand: 'node -e "console.error(\'boom from the app\'); process.exit(3)"' }));
+    appendFileSync(path.join(repo, '.git', 'info', 'exclude'), 'broken.config.json\n');
+    const failed = cli('run', '--config', 'broken.config.json', '--base', baseSha, '--head', headSha);
+    assert.notEqual(failed.status, 0);
+    const errorAt = failed.stderr.indexOf('[ui-diff] error: ');
+    const keptAt = failed.stderr.indexOf('warning: kept the previous report');
+    assert.ok(errorAt >= 0 && keptAt > errorAt, `the real error must come first:\n${failed.stderr}`);
     assert.equal(readFileSync(path.join(outDir, 'report.json'), 'utf8'), kept, 'the previous report must survive a failed run');
     assert.ok(existsSync(compare), 'and so must its images');
+    assert.ok(existsSync(preview), 'and the preview rendered from it');
     const logs = readdirSync(path.join(outDir, 'logs')).map((f) => readFileSync(path.join(outDir, 'logs', f), 'utf8')).join('\n');
     assert.match(logs, /boom from the app/, 'logs/ shows the failed run');
     assert.deepEqual(readdirSync(outDir).filter((e) => e.startsWith('.')), [], 'no staging directory is left behind');
     assert.equal(git(repo, 'status', '--porcelain'), '');
 
-    const render = spawnSync(process.execPath, ['--import', import.meta.resolve('tsx'), path.join(skillRoot, 'src', 'cli.ts'), 'render'], { cwd: repo, encoding: 'utf8' });
+    const render = cli('render');
     assert.equal(render.status, 0, render.stderr);
     assert.match(render.stderr, /the last run failed .*this report is from an earlier run/);
 
     const again = await runPipeline({ cfg, outDir, base: baseSha, head: headSha });
     assert.notEqual(again.report.createdAt, first.report.createdAt);
     assert.ok(!existsSync(path.join(outDir, 'last-run-failed.json')), 'a successful run clears the warning');
+    assert.ok(!existsSync(preview), 'and drops the preview of the old report');
   });
 });

@@ -9,7 +9,7 @@ import { detectChanges, detectSummary } from './detect.js';
 import { exec } from './exec.js';
 import { git, repoRoot } from './git.js';
 import { createGhClient, findStickyComment, getPullRequest, prState, repoVisibility, uploadGuard, upsertStickyComment } from './github.js';
-import { configureLog, log, redact, UiDiffError, writeRedacted } from './log.js';
+import { configureLog, log, notesAfter, redact, UiDiffError, writeRedacted } from './log.js';
 import { referencedImages, renderComment } from './markdown.js';
 import { lastRunFailure, runPipeline } from './pipeline.js';
 import { encodePath, linkBaseFor, listAssetPrs, publishToBranch, pruneBranch, resolveRemote } from './publish.js';
@@ -497,7 +497,9 @@ async function cmdDoctor(values: Values): Promise<void> {
         true,
       );
       const gh = await exec('gh', ['auth', 'status'], { allowFailure: true }).catch(() => ({ code: 1, stdout: '', stderr: 'gh not installed' }));
-      add('gh auth', gh.code === 0, gh.code === 0 ? 'authenticated' : (gh.stderr || gh.stdout).trim().split('\n')[0] ?? 'not authenticated');
+      // Only publish and --pr talk to GitHub, so a missing login is a WARN like the remote, not a broken setup.
+      const ghProblem = (gh.stderr || gh.stdout).trim().split('\n')[0] || 'not signed in';
+      add('gh auth', gh.code === 0, gh.code === 0 ? 'authenticated' : `${ghProblem}; only publish and --pr need it`, true);
       if (info && gh.code === 0) {
         const visibility = await repoVisibility(info);
         add('repo visibility', visibility === 'PRIVATE' || visibility === 'INTERNAL', visibility ?? 'unknown');
@@ -537,10 +539,11 @@ export async function main(argv = process.argv.slice(2)): Promise<number> {
     if (error instanceof UiDiffError) {
       log.error(error.message);
       if (error.hint) log.hint(error.hint);
-      return error.exitCode;
+    } else {
+      log.error(redact((error as Error).stack ?? String(error)));
     }
-    log.error(redact((error as Error).stack ?? String(error)));
-    return 1;
+    for (const note of notesAfter(error)) log.warn(note);
+    return error instanceof UiDiffError ? error.exitCode : 1;
   }
 }
 

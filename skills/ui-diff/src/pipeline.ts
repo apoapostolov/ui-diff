@@ -3,7 +3,7 @@ import path from 'node:path';
 import { diffFocusOrder, diffViolations, type A11yIssue } from './a11y.js';
 import { resolveAuth, sanitizeUrl } from './auth.js';
 import { CaptureSession, launchBrowser, routeUrl, type CaptureRecord, type CaptureTarget } from './capture.js';
-import { parseVariantFlag, pickThemes, pickViewports, resolveRoute, type ResolvedConfig, type ResolvedRoute, type Step, type ThemeConfig, type VariantSpec, type ViewportConfig } from './config.js';
+import { parseVariantFlag, pickThemes, pickViewports, realpathIfExists, resolveRoute, type ResolvedConfig, type ResolvedRoute, type Step, type ThemeConfig, type VariantSpec, type ViewportConfig } from './config.js';
 import { detectChanges, resolveBaseRef, type DetectResult } from './detect.js';
 import { composeCompare, diffPngs, focusBoxes } from './diff.js';
 import { git, gitCommonDir, mergeBase, revParse } from './git.js';
@@ -54,7 +54,8 @@ export function prepareOutDir(outDir: string): void {
 
 /** Keeps the output directory out of `git status` without touching tracked files. */
 export async function excludeFromGit(repoRoot: string, outDir: string): Promise<void> {
-  const rel = path.relative(repoRoot, outDir).split(path.sep).join('/');
+  // Both sides resolved: on macOS a /tmp or /var path and its /private target would differ.
+  const rel = path.relative(realpathIfExists(repoRoot), realpathIfExists(outDir)).split(path.sep).join('/');
   if (!rel || rel.startsWith('..')) return;
   try {
     const exclude = path.join(await gitCommonDir(repoRoot), 'info', 'exclude');
@@ -188,7 +189,7 @@ export async function runPipeline(opts: RunOptions): Promise<RunOutcome> {
   let tokenFiles: string[] = [];
   if (tokensOn) {
     const requested = (opts.tokens ?? []).filter((f) => f !== 'auto');
-    tokenFiles = (requested.length ? requested.map((f) => path.resolve(process.cwd(), f)) : cfg.tokens.files.map((f) => path.resolve(cfg.dir, f))).filter(Boolean);
+    tokenFiles = (requested.length ? requested.map((f) => realpathIfExists(path.resolve(process.cwd(), f))) : cfg.tokens.files.map((f) => path.resolve(cfg.dir, f))).filter(Boolean);
     if (tokenFiles.length === 0) {
       const tracked = (await git(['ls-files', '-z'], { cwd: cfg.dir })).split('\0').filter(Boolean);
       tokenFiles = detectTokenFiles(cfg.dir, tracked).map((f) => path.join(cfg.dir, f));

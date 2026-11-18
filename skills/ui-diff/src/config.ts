@@ -421,7 +421,7 @@ export function toSlashes(p: string): string {
 }
 
 /** Physical path (symlinks resolved) so config and repo paths compare correctly; unchanged when missing. */
-function realpathIfExists(p: string): string {
+export function realpathIfExists(p: string): string {
   try {
     return realpathSync(p);
   } catch {

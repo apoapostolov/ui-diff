@@ -138,6 +138,8 @@ describe('ui-diff end to end', { timeout: 300_000 }, () => {
     assert.equal(report.stats.unchanged, 8, JSON.stringify(report.captures.map((c) => [c.id, c.status, c.diff?.changedPixels])));
     assert.deepEqual(report.a11y!.added, []);
     assert.deepEqual(report.tokens!.findings, []);
+    assert.deepEqual(report.motion, [], 'no motion clips for routes without visual changes');
+    assert.deepEqual(report.motionSkipped, ['/']);
   });
 
   it('publishes to the assets branch and writes the comment without posting', async () => {
@@ -155,6 +157,94 @@ describe('ui-diff end to end', { timeout: 300_000 }, () => {
     assert.ok(body.startsWith('<!-- ui-diff:sticky id=default -->'));
     assert.match(body, /violet pill/);
     assert.match(body, /https:\/\/github\.com\/acme\/shop\/raw\/ui-diff-assets\/pr-42\/default\//);
+  });
+});
+
+const SHIFT_CSS = `body { margin: 0; font: 16px/24px Arial, sans-serif; color: #111827; background: #fff; }
+header { padding: 16px 24px; background: #f3f4f6; }
+.hero { padding: 32px 24px; background: #dbeafe; }
+section { padding: 24px; border-top: 1px solid #e5e7eb; }
+.pulse { width: 24px; height: 24px; background: #2563eb; }
+@media (prefers-reduced-motion: no-preference) { .pulse { animation: slide 0.5s linear infinite alternate; } }
+@keyframes slide { from { transform: translateX(0); } to { transform: translateX(160px); } }`;
+const SECTIONS = ['Features', 'Pricing', 'Questions', 'Contact']
+  .map((t, i) => `<section><h2>${t}</h2>${[1, 2, 3].map((n) => `<p>${t} line ${n}: item ${i * 7 + n * 3} of the list.</p>`).join('')}</section>`)
+  .join('');
+const shiftPage = (hero: string) => `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Shift</title><link rel="stylesheet" href="styles.css"></head>
+<body><header>Shop</header><div class="hero"><h1>Welcome</h1>${hero}<div class="pulse"></div></div>${SECTIONS}</body></html>`;
+
+describe('scroll-aware diff and motion capture', { timeout: 300_000 }, () => {
+  let dir: string;
+  let repo: string;
+  let baseSha: string;
+  let headSha: string;
+
+  before(() => {
+    dir = mkdtempSync(path.join(os.tmpdir(), 'ui-diff-shift-'));
+    repo = path.join(dir, 'repo');
+    mkdirSync(repo, { recursive: true });
+    git(dir, 'init', '-q', '-b', 'main', repo);
+    writeFileSync(path.join(repo, 'serve.mjs'), SERVER);
+    writeFileSync(path.join(repo, 'styles.css'), SHIFT_CSS);
+    writeFileSync(path.join(repo, 'still.html'), '<!doctype html><html lang="en"><head><title>Still</title></head><body><h1>Nothing moves here</h1></body></html>');
+    writeFileSync(path.join(repo, 'index.html'), shiftPage('<p>One short line.</p>'));
+    writeFileSync(
+      path.join(repo, 'ui-diff.config.json'),
+      JSON.stringify({
+        startCommand: 'node serve.mjs --port {port}',
+        routes: [
+          { path: '/', name: 'home', files: ['index.html'], motion: { durationMs: 1200 } },
+          { path: '/still.html', name: 'still', files: ['still.html'], motion: true },
+        ],
+        viewports: [{ name: 'desktop', width: 800, height: 600 }],
+        themes: [{ name: 'light' }],
+        capture: { fixedTime: '2026-01-01T00:00:00Z' },
+        motion: { enabled: true, fps: 8, durationMs: 1000 },
+      }),
+    );
+    baseSha = commit(repo, 'before');
+    writeFileSync(path.join(repo, 'index.html'), shiftPage('<p>One short line.</p><p>A second line that makes the hero taller.</p><p>And a third one.</p>'));
+    headSha = commit(repo, 'taller hero');
+  });
+
+  after(() => {
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  it('reports sections below a taller hero as shifted and records motion only for the changed route', async () => {
+    const cfg = loadConfig(repo, repo);
+    const { report } = await runPipeline({ cfg, outDir: path.join(dir, 'out'), base: baseSha, head: headSha, allRoutes: true });
+    assert.equal(report.stats.errors, 0, JSON.stringify(report.captures.map((c) => c.error)));
+    const home = report.captures.find((c) => c.id === 'home__desktop__light')!;
+    assert.equal(home.status, 'changed');
+    const shifted = home.diff!.shifted ?? [];
+    assert.ok(shifted.length >= 1, `expected shifted content, got ${JSON.stringify(home.diff)}`);
+    const grow = home.diff!.sizeAfter[1] - home.diff!.sizeBefore[1];
+    assert.ok(shifted.some((r) => r.dy === grow && r.height >= 400), JSON.stringify({ grow, shifted }));
+    const heroBottom = home.diff!.sizeAfter[1] - shifted.find((r) => r.dy === grow)!.height;
+    for (const r of home.diff!.regions) assert.ok(r.y + r.height <= heroBottom + 16, `changed region below the hero: ${JSON.stringify(r)} (hero ends ~${heroBottom})`);
+    assert.ok(home.diff!.ratio < 0.25, `ratio ${home.diff!.ratio}`);
+    const comment = readFileSync(path.join(dir, 'out', 'comment.local.md'), 'utf8');
+    assert.match(comment, new RegExp(`content shifted down ${grow}px`));
+
+    assert.equal(report.captures.find((c) => c.route.path === '/still.html')!.status, 'unchanged');
+    assert.deepEqual(report.motion.map((m) => m.route.path), ['/']);
+    assert.deepEqual(report.motionSkipped, ['/still.html']);
+    const clip = report.motion[0];
+    assert.ok(clip.frames && clip.frames.head > 1 && clip.frames.base > 1, `animation guarded by prefers-reduced-motion should play: ${JSON.stringify(clip)}`);
+    assert.equal(clip.warnings, undefined, JSON.stringify(clip.warnings));
+  });
+
+  it('records every route with --motion-all and warns about clips where nothing moved', async () => {
+    const cfg = loadConfig(repo, repo);
+    const { report } = await runPipeline({ cfg, outDir: path.join(dir, 'all'), base: headSha, head: headSha, allRoutes: true, motionAll: true });
+    assert.equal(report.stats.unchanged, 2);
+    assert.deepEqual(report.motion.map((m) => m.route.path).sort(), ['/', '/still.html']);
+    const still = report.motion.find((m) => m.route.path === '/still.html')!;
+    assert.deepEqual(still.frames, { base: 1, head: 1 });
+    assert.match(still.warnings?.[0] ?? '', /^no motion detected/);
+    assert.equal(report.motion.find((m) => m.route.path === '/')!.warnings, undefined);
+    assert.match(readFileSync(path.join(dir, 'all', 'comment.local.md'), 'utf8'), /no motion detected/);
   });
 });
 

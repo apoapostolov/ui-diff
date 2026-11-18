@@ -1,6 +1,7 @@
 import pixelmatch from 'pixelmatch';
 import type { PNG } from 'pngjs';
-import { clampBox, COLORS, composeRow, crop, fadeToGray, intersects, padTo, parseHexColor, resizeToWidth, strokeRect, unionBox, type Box, type RGBA } from './image.js';
+import { alignRows, shiftedBlocks, type RowBlock } from './align.js';
+import { clampBox, COLORS, composeRow, createImage, crop, fadeToGray, fillRect, intersects, padTo, parseHexColor, resizeToWidth, strokeRect, unionBox, type Box, type RGBA } from './image.js';
 
 export interface DiffOptions {
   threshold: number;
@@ -9,6 +10,8 @@ export interface DiffOptions {
   highlight: string;
   /** Device pixel ratio of the screenshots; region sizes scale with it. */
   scale?: number;
+  /** Align rows first so content that only moved vertically is not counted as changed (default true). */
+  alignShifts?: boolean;
 }
 
 export interface DiffOutcome {
@@ -21,6 +24,10 @@ export interface DiffOutcome {
   before: { width: number; height: number };
   after: { width: number; height: number };
   regions: Box[];
+  /** Runs of identical content that moved vertically (device px; dy = after − before). Not counted as changed. */
+  shifted: RowBlock[];
+  /** Before rows that have no counterpart on the after side (content removed). */
+  removedRows: number;
   /** Padded inputs (same size) — used to cut aligned crops. */
   paddedBefore: PNG;
   paddedAfter: PNG;
@@ -100,24 +107,64 @@ export function findRegions(mask: Uint8Array, width: number, height: number, cel
   return mergeBoxes(boxes, gap).sort((a, b) => area(b) - area(a));
 }
 
+const SHIFT_BAND: RGBA = [59, 130, 246, 255];
+
+/** Builds the "before" rows each after row should be compared with (row alignment), padded where there is none. */
+function alignedBefore(before: PNG, after: PNG, source: Int32Array, pad: RGBA): PNG {
+  const out = createImage(after.width, after.height, pad);
+  const stride = after.width * 4;
+  for (let y = 0; y < after.height; y++) {
+    const from = source[y];
+    if (from >= 0) before.data.copy(out.data, y * stride, from * stride, (from + 1) * stride);
+  }
+  return out;
+}
+
 export function diffPngs(before: PNG, after: PNG, opts: DiffOptions): DiffOutcome {
   const scale = opts.scale ?? 1;
   const width = Math.max(before.width, after.width);
   const height = Math.max(before.height, after.height);
   const a = padTo(before, width, height, COLORS.pad);
   const b = padTo(after, width, height, COLORS.pad);
-  const maskOut = new Uint8Array(width * height * 4);
-  const changedPixels = pixelmatch(a.data, b.data, maskOut, width, height, {
-    threshold: opts.threshold,
-    includeAA: opts.includeAA,
-    diffMask: true,
-    diffColor: [255, 0, 0],
-  });
   const mask = new Uint8Array(width * height);
-  for (let i = 0; i < mask.length; i++) mask[i] = maskOut[i * 4 + 3] > 0 ? 1 : 0;
+  let changedPixels: number;
+  let shifted: RowBlock[] = [];
+  let removedRows = 0;
+  const removedBoxes: Box[] = [];
+  const pixelOpts = { threshold: opts.threshold, includeAA: opts.includeAA, diffMask: true, diffColor: [255, 0, 0] as [number, number, number] };
+
+  if ((opts.alignShifts ?? true) && before.width === after.width) {
+    const alignment = alignRows(before, after);
+    const reference = alignedBefore(before, after, alignment.source, COLORS.pad);
+    const out = new Uint8Array(after.width * after.height * 4);
+    pixelmatch(reference.data, after.data, out, after.width, after.height, pixelOpts);
+    for (let i = 0; i < after.width * after.height; i++) mask[i] = out[i * 4 + 3] > 0 ? 1 : 0;
+    // Inserted rows have no counterpart: they are new content even where they resemble the padding.
+    for (let y = 0; y < after.height; y++) if (alignment.source[y] < 0) mask.fill(1, y * width, (y + 1) * width);
+    for (const gap of alignment.removed) {
+      removedRows += gap.rows;
+      if (gap.afterY >= after.height) {
+        // Content removed at the bottom: the padded after side shows nothing there.
+        for (let y = after.height; y < height; y++) mask.fill(1, y * width, (y + 1) * width);
+      } else {
+        const band = Math.max(2, Math.round(2 * scale));
+        removedBoxes.push(clampBox({ x: 0, y: Math.max(0, gap.afterY - band), width, height: band * 2 }, width, height));
+      }
+    }
+    shifted = shiftedBlocks(alignment.blocks, Math.max(4, Math.round(4 * scale)));
+    changedPixels = 0;
+    for (let i = 0; i < mask.length; i++) changedPixels += mask[i];
+  } else {
+    const maskOut = new Uint8Array(width * height * 4);
+    changedPixels = pixelmatch(a.data, b.data, maskOut, width, height, pixelOpts);
+    for (let i = 0; i < mask.length; i++) mask[i] = maskOut[i * 4 + 3] > 0 ? 1 : 0;
+  }
   const sizeChanged = before.width !== after.width || before.height !== after.height;
-  const changed = changedPixels >= Math.max(1, opts.minChangedPixels) || sizeChanged;
-  const regions = changed ? findRegions(mask, width, height, Math.round(8 * scale), Math.round(24 * scale)) : [];
+  const removedPixels = removedBoxes.length ? removedRows * width : 0;
+  const changed = changedPixels + removedPixels >= Math.max(1, opts.minChangedPixels) || sizeChanged;
+  const regions = changed
+    ? mergeBoxes([...findRegions(mask, width, height, Math.round(8 * scale), Math.round(24 * scale)), ...removedBoxes], Math.round(24 * scale)).sort((x, y) => area(y) - area(x))
+    : [];
 
   const highlight: RGBA = parseHexColor(opts.highlight);
   const diffImage = fadeToGray(b, 0.28);
@@ -131,6 +178,9 @@ export function diffPngs(before: PNG, after: PNG, opts: DiffOptions): DiffOutcom
   }
   const stroke = Math.max(2, Math.round(2 * scale));
   for (const region of regions) strokeRect(diffImage, region, highlight, stroke);
+  // A slim band on the left edge marks content that only moved.
+  const bandWidth = Math.max(3, Math.round(3 * scale));
+  for (const block of shifted) fillRect(diffImage, clampBox({ x: 0, y: block.afterY, width: bandWidth, height: block.height }, width, height), SHIFT_BAND);
 
   return {
     width,
@@ -142,6 +192,8 @@ export function diffPngs(before: PNG, after: PNG, opts: DiffOptions): DiffOutcom
     before: { width: before.width, height: before.height },
     after: { width: after.width, height: after.height },
     regions,
+    shifted,
+    removedRows,
     paddedBefore: a,
     paddedAfter: b,
     diffImage,

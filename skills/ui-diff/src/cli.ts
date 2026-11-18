@@ -15,6 +15,7 @@ import { runPipeline } from './pipeline.js';
 import { encodePath, linkBaseFor, listAssetPrs, publishToBranch, pruneBranch, resolveRemote } from './publish.js';
 import type { Report } from './report.js';
 import { killAllServers } from './server.js';
+import { detectTokenFiles } from './tokens.js';
 import { VERSION } from './version.js';
 
 const HELP = `ui-diff ${VERSION} — before/after screenshots, pixel diffs and a UX summary for UI changes in a PR
@@ -46,8 +47,10 @@ detect / run
   --viewports <list>     e.g. desktop,mobile or tablet:820x1180@2
   --themes <list>        e.g. light,dark
   --variants <spec>      Variant compare, e.g. hero=1..4 or /pricing:plan=a,b (repeatable)
-  --motion               Record before/after motion clips
-  --tokens <files>       Design-token audit against JSON/CSS token files (comma-separated)
+  --motion               Record before/after motion clips (routes with visual changes only)
+  --motion-all           Record motion clips for every route, changed or not
+  --tokens <files>       Design-token audit against JSON, CSS or StyleX (*.stylex.ts) token files
+                         (comma-separated; "auto" finds them)
   --a11y                 Accessibility delta: new and fixed axe issues, focus order
   --keep-worktrees       Keep the temporary worktrees for inspection
 
@@ -99,6 +102,7 @@ function parse(argv: string[]): { command: string; values: Values } {
       themes: { type: 'string' },
       variants: { type: 'string', multiple: true },
       motion: { type: 'boolean' },
+      'motion-all': { type: 'boolean' },
       tokens: { type: 'string' },
       a11y: { type: 'boolean' },
       'keep-worktrees': { type: 'boolean' },
@@ -174,7 +178,8 @@ async function cmdRun(values: Values): Promise<void> {
     viewports: list(values.viewports),
     themes: list(values.themes),
     variants: values.variants as string[] | undefined,
-    motion: Boolean(values.motion),
+    motion: Boolean(values.motion) || Boolean(values['motion-all']),
+    motionAll: Boolean(values['motion-all']),
     tokens: list(values.tokens),
     a11y: Boolean(values.a11y),
     keepWorktrees: Boolean(values['keep-worktrees']),
@@ -192,7 +197,8 @@ async function cmdRun(values: Values): Promise<void> {
       .filter((c) => c.status !== 'unchanged')
       .map((c) => ({ id: c.id, status: c.status, ratio: c.diff?.ratio, images: [...c.images.focus, c.images.compare ?? c.images.head].filter(Boolean), error: c.error })),
     variants: r.variants.map((v) => ({ id: v.id, images: v.items.map((i) => i.image ?? i.error) })),
-    motion: r.motion.map((m) => ({ id: m.id, gif: m.gif, webm: m.webm, error: m.error })),
+    motion: r.motion.map((m) => ({ id: m.id, gif: m.gif, webm: m.webm, frames: m.frames, warnings: m.warnings, error: m.error })),
+    motionSkipped: r.motionSkipped,
     a11y: r.a11y ? { new: r.a11y.added.length, fixed: r.a11y.fixed.length, focusChanges: r.a11y.focus.filter((f) => f.delta.changed).length } : undefined,
     tokens: r.tokens ? { new: r.tokens.findings.filter((f) => f.isNew).length, existing: r.tokens.findings.filter((f) => !f.isNew).length } : undefined,
     warnings: r.warnings,
@@ -439,8 +445,10 @@ async function cmdInit(values: Values): Promise<void> {
     a11y: { enabled: true },
   };
   if (config.routes.length === 0) config.routes = ['/'];
-  writeFileSync(file, `${JSON.stringify(config, null, 2)}\n`);
-  print({ written: path.relative(process.cwd(), file), framework, startCommand: config.startCommand, routes: config.routes, next: 'Review startCommand and routes, then run `ui-diff doctor`.' });
+  const tokenFiles = detectTokenFiles(dir, dirRel ? files.map((f) => f.slice(dirRel.length + 1)) : files);
+  const written: Record<string, unknown> = tokenFiles.length ? { ...config, tokens: { enabled: true, files: tokenFiles } } : config;
+  writeFileSync(file, `${JSON.stringify(written, null, 2)}\n`);
+  print({ written: path.relative(process.cwd(), file), framework, startCommand: config.startCommand, routes: config.routes, tokens: tokenFiles.length ? tokenFiles : undefined, next: 'Review startCommand and routes, then run `ui-diff doctor`.' });
 }
 
 export interface DoctorCheck {

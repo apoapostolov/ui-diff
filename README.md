@@ -48,8 +48,8 @@ Extras, each behind a flag or config key:
 | | Flag / config | |
 |---|---|---|
 | Variant compare | `--variants hero=1..4` | Every value of a query param side by side in one table, with tick boxes reviewers use to pick (ticks survive updates). |
-| Motion clips | `--motion`, `routes[].motion.steps` | Before/after GIF (and optional WebM) of a scripted hover/click/scroll. |
-| Token audit | `--tokens tokens.json` | Computed colors, spacing, radii and type in the changed areas that match no design token (JSON or CSS variables), with selectors and the nearest token. |
+| Motion clips | `--motion`, `routes[].motion.steps` | Before/after GIF (and optional WebM) of a scripted hover/click/scroll, for routes that changed (`--motion-all` for every route). Warns when nothing moved. |
+| Token audit | `--tokens tokens.json` | Computed colors, spacing, radii and type in the changed areas that match no design token (JSON, CSS variables or StyleX `defineVars`, auto-detected when no files are set), with selectors and the nearest token. |
 | Protected previews | `--base-url/--head-url` + `auth` | Vercel Authentication and similar, with a header/cookie from env sent only to the preview origin; never share or bypass links. |
 | Accessibility delta | `--a11y` | axe-core on both sides, reporting only new and fixed issues (contrast, labels, focus) plus tab-order changes. |
 
@@ -259,17 +259,15 @@ skills/ui-diff/
 
 Not built yet; ideas that would make reviews better for design engineers:
 
-1. **Shift-aware diffs.** Align pixel rows that only moved (a taller heading pushing content down)
-   so only genuinely changed areas light up; today one extra line can mark 18% of a page as changed.
-2. **Measured style changes per region.** List exact before → after computed values for elements in
+1. **Measured style changes per region.** List exact before → after computed values for elements in
    changed areas (`padding 8px 14px → 12px 24px`, `#2563eb → #7c3aed`) so reviewers verify intent
    instead of eyeballing pixels.
-3. **Figma fidelity check.** Compare head against a linked Figma frame (token kept private) to catch
+2. **Figma fidelity check.** Compare head against a linked Figma frame (token kept private) to catch
    drift from the approved design, not just from the previous build.
-4. **Responsive and content stress sweep.** Capture a breakpoint range (320–1440px) plus long-text,
+3. **Responsive and content stress sweep.** Capture a breakpoint range (320–1440px) plus long-text,
    RTL and pseudo-localized variants of changed screens to catch breakage that two fixed viewports
    and happy-path copy miss.
-5. **Design sign-off gate.** A `ui-diff/design-review` commit status that stays pending until a
+4. **Design sign-off gate.** A `ui-diff/design-review` commit status that stays pending until a
    designer ticks "Approved" in the sticky comment, tied to the head SHA so new pushes need a new
    approval.
 

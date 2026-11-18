@@ -816,6 +816,11 @@
         "highlightColor": {
           "default": "#FF0080",
           "type": "string"
+        },
+        "alignShifts": {
+          "default": true,
+          "description": "Match content that only moved up or down (e.g. below a taller hero) and report it as shifted instead of changed",
+          "type": "boolean"
         }
       },
       "additionalProperties": false
@@ -919,6 +924,11 @@
       "properties": {
         "enabled": {
           "default": false,
+          "type": "boolean"
+        },
+        "all": {
+          "default": false,
+          "description": "Record clips for routes without visual changes too (same as --motion-all)",
           "type": "boolean"
         },
         "format": {

@@ -6,16 +6,16 @@ import { CaptureSession, launchBrowser, routeUrl, type CaptureRecord, type Captu
 import { parseVariantFlag, pickThemes, pickViewports, resolveRoute, type ResolvedConfig, type ResolvedRoute, type Step, type ThemeConfig, type VariantSpec, type ViewportConfig } from './config.js';
 import { detectChanges, resolveBaseRef, type DetectResult } from './detect.js';
 import { composeCompare, diffPngs, focusBoxes } from './diff.js';
-import { gitCommonDir, mergeBase, revParse } from './git.js';
+import { git, gitCommonDir, mergeBase, revParse } from './git.js';
 import { COLORS, composeRow, readPng, resizeToWidth, writePng } from './image.js';
 import { log, UiDiffError, writeRedacted } from './log.js';
 import { renderComment } from './markdown.js';
-import { encodeSideBySideGif, moveFile, recordFrames, writeFile, type RawFrame } from './motion.js';
+import { distinctFrames, encodeSideBySideGif, motionWarning, moveFile, recordFrames, writeFile, type RawFrame } from './motion.js';
 import { autoSummary, computeStats, pct, truncationWarning, type CaptureResult, type MotionResult, type Report, type SideSummary, type VariantGroup } from './report.js';
 import { killAllServers } from './server.js';
 import { SideManager, type Side, type SideRequest } from './sides.js';
 import { describeStep, runSteps } from './steps.js';
-import { aggregateFindings, auditSnapshot, buildTokenSet, findingKeys, hasCategory, loadTokenFiles, tokenColorStrings, type StyleSnapshot, type TokenSet } from './tokens.js';
+import { aggregateFindings, auditSnapshot, buildTokenSet, detectTokenFiles, findingKeys, hasCategory, loadTokenFiles, tokenColorStrings, type StyleSnapshot, type TokenSet } from './tokens.js';
 import { VERSION } from './version.js';
 
 export interface RunOptions {
@@ -31,6 +31,8 @@ export interface RunOptions {
   themes?: string[];
   variants?: string[];
   motion?: boolean;
+  /** Record motion clips for routes without visual changes too. */
+  motionAll?: boolean;
   tokens?: string[];
   a11y?: boolean;
   keepWorktrees?: boolean;
@@ -185,8 +187,14 @@ export async function runPipeline(opts: RunOptions): Promise<RunOutcome> {
   let tokenSet: TokenSet | undefined;
   let tokenFiles: string[] = [];
   if (tokensOn) {
-    tokenFiles = (opts.tokens?.length ? opts.tokens.map((f) => path.resolve(process.cwd(), f)) : cfg.tokens.files.map((f) => path.resolve(cfg.dir, f))).filter(Boolean);
-    if (tokenFiles.length === 0) throw new UiDiffError('Token audit is enabled but no token files are configured', { hint: 'Set tokens.files in ui-diff.config.json or pass --tokens path/to/tokens.json' });
+    const requested = (opts.tokens ?? []).filter((f) => f !== 'auto');
+    tokenFiles = (requested.length ? requested.map((f) => path.resolve(process.cwd(), f)) : cfg.tokens.files.map((f) => path.resolve(cfg.dir, f))).filter(Boolean);
+    if (tokenFiles.length === 0) {
+      const tracked = (await git(['ls-files', '-z'], { cwd: cfg.dir })).split('\0').filter(Boolean);
+      tokenFiles = detectTokenFiles(cfg.dir, tracked).map((f) => path.join(cfg.dir, f));
+      if (tokenFiles.length) log.info(`auto-detected token files: ${tokenFiles.map((f) => path.relative(cfg.repoRoot, f)).join(', ')}`);
+    }
+    if (tokenFiles.length === 0) throw new UiDiffError('Token audit is enabled but no token files were configured or found', { hint: 'Set tokens.files in ui-diff.config.json or pass --tokens path/to/tokens.json (JSON, CSS or StyleX *.stylex.ts)' });
     tokenSet = buildTokenSet(loadTokenFiles(tokenFiles), cfg.tokens.remBase);
     log.info(`loaded ${tokenSet.values.length} design tokens from ${tokenFiles.map((f) => path.relative(cfg.repoRoot, f)).join(', ')}`);
   }
@@ -255,7 +263,11 @@ export async function runPipeline(opts: RunOptions): Promise<RunOutcome> {
     }
 
     const variants = await captureVariants(session, { routes, viewports, themes, head, outDir, cfg, specs: variantSpecs(opts, routes) });
-    const motion = motionOn ? await captureMotion(session, { routes, viewports, themes, base, head, outDir, cfg, explicit: Boolean(opts.motion) }) : [];
+    const changedRoutes = new Set(captures.filter((c) => c.status === 'changed' || c.status === 'added' || c.status === 'removed').map((c) => c.route.path));
+    const motionSkipped: string[] = [];
+    const motion = motionOn
+      ? await captureMotion(session, { routes, viewports, themes, base, head, outDir, cfg, explicit: Boolean(opts.motion), all: cfg.motion.all || Boolean(opts.motionAll), changedRoutes, skipped: motionSkipped })
+      : [];
     const tokens = tokenSet ? auditTokens(captures, { outDir, tokenSet, cfg, files: tokenFiles }) : undefined;
     const a11y = a11yOn ? a11yDelta(captures, plans, records, cfg) : undefined;
 
@@ -281,6 +293,7 @@ export async function runPipeline(opts: RunOptions): Promise<RunOutcome> {
       captures,
       variants,
       motion,
+      motionSkipped: motionSkipped.length ? motionSkipped : undefined,
       tokens,
       a11y,
       warnings,
@@ -346,7 +359,9 @@ function compareCapture(plan: Plan, baseRec: CaptureRecord, headRec: CaptureReco
     minChangedPixels: cfg.diff.minChangedPixels,
     highlight: cfg.diff.highlightColor,
     scale,
+    alignShifts: cfg.diff.alignShifts,
   });
+  const css = (n: number) => Math.round(n / scale);
   result.status = diff.changed ? 'changed' : 'unchanged';
   result.diff = {
     changedPixels: diff.changedPixels,
@@ -357,6 +372,8 @@ function compareCapture(plan: Plan, baseRec: CaptureRecord, headRec: CaptureReco
     sizeAfter: [diff.after.width, diff.after.height],
     sizeChanged: diff.sizeChanged,
   };
+  if (diff.shifted.length) result.diff.shifted = diff.shifted.map((r) => ({ beforeY: css(r.beforeY), afterY: css(r.afterY), height: css(r.height), dy: css(r.dy) }));
+  if (diff.removedRows) result.diff.removedHeight = css(diff.removedRows);
   if (!diff.changed) return result;
   const labels = {
     before: `BEFORE ${ctx.base.shortSha ?? 'BASE'}`,
@@ -427,11 +444,26 @@ async function captureVariants(
 
 async function captureMotion(
   session: CaptureSession,
-  ctx: { routes: ResolvedRoute[]; viewports: ViewportConfig[]; themes: ThemeConfig[]; base: Side; head: Side; outDir: string; cfg: ResolvedConfig; explicit: boolean },
+  ctx: {
+    routes: ResolvedRoute[];
+    viewports: ViewportConfig[];
+    themes: ThemeConfig[];
+    base: Side;
+    head: Side;
+    outDir: string;
+    cfg: ResolvedConfig;
+    explicit: boolean;
+    all: boolean;
+    changedRoutes: Set<string>;
+    skipped: string[];
+  },
 ): Promise<MotionResult[]> {
   const { cfg } = ctx;
   const declared = ctx.routes.filter((r) => r.motion);
-  const targets = declared.length ? declared : ctx.explicit ? ctx.routes : [];
+  const candidates = declared.length ? declared : ctx.explicit ? ctx.routes : [];
+  const targets = motionTargets(candidates, ctx.changedRoutes, ctx.all);
+  for (const route of candidates) if (!targets.includes(route)) ctx.skipped.push(route.path);
+  if (ctx.skipped.length) log.info(`motion: skipping unchanged route(s) ${ctx.skipped.join(', ')} (use --motion-all to record them)`);
   const results: MotionResult[] = [];
   for (const route of targets) {
     const m = route.motion ?? {};
@@ -460,10 +492,18 @@ async function captureMotion(
             recorded = await recordFrames(page, steps, recordOpts);
           }
           frames[side.name] = recorded.frames;
+          const reduced = await page.evaluate(() => matchMedia('(prefers-reduced-motion: reduce)').matches).catch(() => false);
+          if (reduced) (result.warnings ??= []).push(`${side.name}: the page saw prefers-reduced-motion: reduce while recording`);
           for (const s of recorded.skipped) result.steps = result.steps.map((d) => (d === s ? `${d} (not on ${side.name})` : d));
         } finally {
           await context.close().catch(() => undefined);
         }
+      }
+      result.frames = { base: distinctFrames(frames.base), head: distinctFrames(frames.head) };
+      const still = motionWarning(result.frames);
+      if (still) {
+        (result.warnings ??= []).push(still);
+        log.warn(`motion ${route.path}: ${still}`);
       }
       if (cfg.motion.format !== 'webm') {
         const gif = encodeSideBySideGif(frames.base, frames.head, {
@@ -484,6 +524,11 @@ async function captureMotion(
     results.push(result);
   }
   return results;
+}
+
+/** Routes that get a motion clip: those with a visual change, or all of them with --motion-all. */
+export function motionTargets<T extends { path: string }>(candidates: T[], changedRoutes: Set<string>, all: boolean): T[] {
+  return all ? candidates : candidates.filter((r) => changedRoutes.has(r.path));
 }
 
 async function recordWebm(

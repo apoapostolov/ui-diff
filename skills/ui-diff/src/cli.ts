@@ -355,19 +355,58 @@ async function cmdPrune(values: Values): Promise<void> {
   print({ removedPrs: selected, files: result.removed.length, pushed: result.pushed });
 }
 
-function suggestStartCommand(dir: string): { startCommand?: string; framework: string } {
+/** Package manager of the app, from the nearest lockfile in `dir` or up to `root`. */
+export function detectPackageManager(dir: string, root = dir): 'npm' | 'pnpm' | 'yarn' | 'bun' {
+  for (let d = path.resolve(dir); ; d = path.dirname(d)) {
+    if (existsSync(path.join(d, 'pnpm-lock.yaml'))) return 'pnpm';
+    if (existsSync(path.join(d, 'yarn.lock'))) return 'yarn';
+    if (existsSync(path.join(d, 'bun.lock')) || existsSync(path.join(d, 'bun.lockb'))) return 'bun';
+    if (existsSync(path.join(d, 'package-lock.json'))) return 'npm';
+    if (d === path.resolve(root) || d === path.dirname(d)) return 'npm';
+  }
+}
+
+/**
+ * Suggests a start command. The project's own `dev` script wins (it carries the right config,
+ * env and plugins); `--port {port}` is appended when the framework accepts it.
+ */
+export function suggestStartCommand(dir: string, root = dir): { startCommand?: string; framework: string } {
   const pkgFile = path.join(dir, 'package.json');
   if (existsSync(pkgFile)) {
     const pkg = JSON.parse(readFileSync(pkgFile, 'utf8')) as { dependencies?: Record<string, string>; devDependencies?: Record<string, string>; scripts?: Record<string, string> };
     const deps = { ...pkg.dependencies, ...pkg.devDependencies };
+    const framework = deps.next
+      ? 'Next.js'
+      : deps.nuxt
+        ? 'Nuxt'
+        : deps.astro
+          ? 'Astro'
+          : deps['@remix-run/dev'] || deps['@react-router/dev']
+            ? 'Remix / React Router'
+            : deps['@sveltejs/kit']
+              ? 'SvelteKit'
+              : deps['@tanstack/react-start'] || deps['@tanstack/solid-start']
+                ? 'TanStack Start'
+                : deps.vite
+                  ? 'Vite'
+                  : deps['react-scripts']
+                    ? 'Create React App'
+                    : undefined;
+    const takesPort = Boolean(framework && framework !== 'Create React App');
+    const pm = detectPackageManager(dir, root);
+    const dev = pkg.scripts?.dev;
+    if (dev) {
+      const run = pm === 'npm' ? 'npm run dev' : `${pm} run dev`;
+      const ownPort = /(?:^|\s)(?:--port|-p)(?:[\s=]|$)/.test(dev);
+      if (takesPort && !ownPort) return { startCommand: `${run}${pm === 'npm' ? ' --' : ''} --port {port}`, framework: `${framework} (dev script)` };
+      return { startCommand: run, framework: `${framework ?? 'npm script'} (dev script${ownPort ? ' sets its own port; match baseUrl to it' : ' uses PORT'})` };
+    }
     if (deps.next) return { startCommand: 'npx next dev --port {port}', framework: 'Next.js' };
     if (deps.nuxt) return { startCommand: 'npx nuxi dev --port {port}', framework: 'Nuxt' };
     if (deps.astro) return { startCommand: 'npx astro dev --port {port}', framework: 'Astro' };
-    if (deps['@remix-run/dev'] || deps['@react-router/dev']) return { startCommand: 'npm run dev -- --port {port}', framework: 'Remix / React Router' };
     if (deps['@sveltejs/kit'] || deps.vite) return { startCommand: 'npx vite --port {port} --strictPort', framework: deps['@sveltejs/kit'] ? 'SvelteKit' : 'Vite' };
     if (deps['react-scripts']) return { startCommand: 'npx react-scripts start', framework: 'Create React App (uses PORT)' };
-    if (pkg.scripts?.dev) return { startCommand: 'npm run dev', framework: 'npm script (uses PORT)' };
-    if (pkg.scripts?.start) return { startCommand: 'npm start', framework: 'npm script (uses PORT)' };
+    if (pkg.scripts?.start) return { startCommand: pm === 'npm' ? 'npm start' : `${pm} start`, framework: 'npm script (uses PORT)' };
   }
   if (existsSync(path.join(dir, 'index.html'))) return { startCommand: 'python3 -m http.server {port} --bind 127.0.0.1', framework: 'static HTML' };
   return { framework: 'unknown' };
@@ -378,7 +417,7 @@ async function cmdInit(values: Values): Promise<void> {
   const file = path.resolve(process.cwd(), (values.config as string | undefined) ?? CONFIG_FILENAME);
   if (existsSync(file) && !values.force) throw new UiDiffError(`${path.relative(process.cwd(), file)} already exists`, { hint: 'Pass --force to overwrite.' });
   const dir = path.dirname(file);
-  const { startCommand, framework } = suggestStartCommand(dir);
+  const { startCommand, framework } = suggestStartCommand(dir, root);
   const dirRel = path.relative(root, dir).split(path.sep).join('/');
   const files = (await git(['ls-files', '-z'], { cwd: root })).split('\0').filter((f) => f && (!dirRel || f.startsWith(`${dirRel}/`)));
   const routes = new Set<string>();

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
-import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { after, before, describe, it } from 'node:test';
@@ -26,10 +26,10 @@ describe('publish --dry-run', () => {
   let fakeBin: string;
   const savedPath = process.env.PATH;
 
-  function dryRun(repo: string, visibility: string): Record<string, unknown> {
+  function dryRun(repo: string, visibility: string, searchPath = `${fakeBin}${path.delimiter}${savedPath}`): Record<string, unknown> {
     const result = spawnSync(process.execPath, ['--import', import.meta.resolve('tsx'), path.join(skillRoot, 'src', 'cli.ts'), 'publish', '--pr', '3', '--dry-run'], {
       cwd: repo,
-      env: { ...process.env, PATH: `${fakeBin}${path.delimiter}${savedPath}`, FAKE_GH_VISIBILITY: visibility },
+      env: { ...process.env, PATH: searchPath, FAKE_GH_VISIBILITY: visibility },
       encoding: 'utf8',
     });
     assert.equal(result.status, 0, result.stderr);
@@ -78,6 +78,17 @@ process.exit(1);
     const result = dryRun(repoWithReport('private', 'https://github.com/qa-org/private-app.git'), 'PRIVATE');
     assert.equal(result.publishable, true);
     assert.deepEqual(result.problems, []);
+  });
+
+  it('reports the visibility as unknown when gh is not installed', () => {
+    const noGh = path.join(dir, 'no-gh-bin');
+    mkdirSync(noGh);
+    symlinkSync(execFileSync('sh', ['-c', 'command -v git'], { encoding: 'utf8' }).trim(), path.join(noGh, 'git'));
+    const result = dryRun(repoWithReport('no-gh', 'https://github.com/qa-org/app.git'), 'PRIVATE', noGh);
+    assert.equal(result.publishable, false);
+    assert.equal(result.visibility, 'unknown');
+    assert.ok((result.problems as string[]).some((p) => /Could not verify/.test(p)));
+    assert.ok((result.hints as string[]).some((h) => /Install the GitHub CLI/.test(h)));
   });
 
   it('still renders the comment without a git remote and says why a real publish would stop', () => {

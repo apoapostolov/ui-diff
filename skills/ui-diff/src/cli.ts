@@ -277,7 +277,7 @@ async function cmdPublish(values: Values): Promise<void> {
   const uploads = upload ? referencedImages(report, renderOpts) : [];
   const commentFile = path.join(outDir, 'comment.md');
   const guard = upload
-    ? uploadGuard(info ? await repoVisibility(info) : undefined, { allowPublic: Boolean(values['allow-public-repo'] || cfg.publish.allowPublicRepo), assumePrivate: Boolean(values['assume-private']) })
+    ? uploadGuard(info ? await repoVisibility(info).catch(() => undefined) : undefined, { allowPublic: Boolean(values['allow-public-repo'] || cfg.publish.allowPublicRepo), assumePrivate: Boolean(values['assume-private']) })
     : undefined;
 
   if (dryRun) {
@@ -291,7 +291,7 @@ async function cmdPublish(values: Values): Promise<void> {
       publishable: problems.length === 0,
       problems,
       hints: [upload && !linkBase && noLinkHint, guard && !guard.allowed && guard.hint].filter(Boolean),
-      visibility: guard?.visibility ?? null,
+      visibility: guard ? (guard.visibility ?? 'unknown') : null,
       wouldUpload: uploads.map((p) => ({ file: path.relative(process.cwd(), path.join(outDir, p)), to: `${branch}:${runDir}/${p}` })),
       comment: path.relative(process.cwd(), commentFile),
       length: body.length,

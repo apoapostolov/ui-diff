@@ -127,7 +127,7 @@ export function uploadGuard(visibility: Visibility | undefined, opts: { allowPub
     return {
       allowed: false,
       reason: 'Could not verify that the repository is private (gh could not read its visibility)',
-      hint: 'Run `gh auth login`, or pass --assume-private if you are sure only repository members can read it.',
+      hint: 'Install the GitHub CLI and run `gh auth login` (or set GH_TOKEN), or pass --assume-private if you are sure only repository members can read it.',
     };
   }
   return { allowed: true, visibility, warning: visibility === 'INTERNAL' ? 'repository is internal: screenshots are visible to every member of the enterprise' : undefined };

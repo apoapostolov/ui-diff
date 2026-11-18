@@ -7,10 +7,12 @@ import { applyAuth, type ResolvedAuth } from './auth.js';
 import type { ResolvedConfig, ResolvedRoute, ThemeConfig, ViewportConfig } from './config.js';
 import { DEV_OVERLAY_SELECTORS, freezeAnimations, hideCss, initScript, pageHeight, scrollThrough, waitForFontsAndImages } from './determinism.js';
 import { exec } from './exec.js';
+import type { Box } from './image.js';
 import { log, redact, UiDiffError } from './log.js';
 import type { SideName } from './sides.js';
 import { runSteps } from './steps.js';
 import type { StyleSnapshot } from './tokens.js';
+import { changedRegions, type UnsettledRegion } from './unsettled.js';
 
 export interface CaptureTarget {
   id: string;
@@ -39,10 +41,84 @@ export interface CaptureRecord {
   truncated: boolean;
   stable: boolean;
   attempts: number;
+  /** Set when screenshots of this one page load kept changing; lists the areas when they could be found. */
+  unsettled?: UnsettledRegion[];
+  /** The page clock was paused for the final screenshots because something kept moving. */
+  frozeTimers?: boolean;
   stylesFile?: string;
   axe?: AxeViolation[];
   focusOrder?: FocusStop[];
   durationMs: number;
+}
+
+/** Names the element behind each changing area so the warning can say what to mask. */
+async function describeRegions(page: Page, boxes: Box[], fullPage: boolean): Promise<UnsettledRegion[]> {
+  if (boxes.length === 0) return [];
+  return page
+    .evaluate(
+      ({ boxes, fullPage }) => {
+        // No named helper functions in here: the test runner's transpiler wraps them in a helper the page lacks.
+        const dpr = window.devicePixelRatio || 1;
+        const helpers = (window as unknown as { __uiDiff?: { cssPath(el: Element): string } }).__uiDiff;
+        const ox = fullPage ? window.scrollX : 0;
+        const oy = fullPage ? window.scrollY : 0;
+        const elements = Array.from(document.body?.querySelectorAll('*') ?? []);
+        const pageHeight = document.documentElement.scrollHeight;
+        const out: Array<{ selector?: string; box: { x: number; y: number; width: number; height: number } }> = [];
+        for (const device of boxes) {
+          const box = { x: Math.floor(device.x / dpr), y: Math.floor(device.y / dpr), width: Math.ceil(device.width / dpr), height: Math.ceil(device.height / dpr) };
+          let best: Element | undefined;
+          let bestArea = Infinity;
+          for (const el of elements) {
+            const r = el.getBoundingClientRect();
+            const area = r.width * r.height;
+            if (area === 0 || area >= bestArea) continue;
+            const left = r.left + ox;
+            const top = r.top + oy;
+            if (left <= box.x + 2 && top <= box.y + 2 && left + r.width >= box.x + box.width - 2 && top + r.height >= box.y + box.height - 2) {
+              best = el;
+              bestArea = area;
+            }
+          }
+          if (!best) {
+            // Nothing covers both where it was and where it went (e.g. a positioned element that moves): take the
+            // biggest overlap, looking a little around the box because the area it just left is empty.
+            const near = { x: box.x - 16, y: box.y - 16, width: box.width + 32, height: box.height + 32 };
+            let bestOverlap = 0;
+            for (const el of elements) {
+              const r = el.getBoundingClientRect();
+              if (r.width * r.height === 0 || r.width * r.height > 4 * near.width * near.height) continue;
+              const w = Math.min(r.left + ox + r.width, near.x + near.width) - Math.max(r.left + ox, near.x);
+              const h = Math.min(r.top + oy + r.height, near.y + near.height) - Math.max(r.top + oy, near.y);
+              if (w > 0 && h > 0 && w * h > bestOverlap) {
+                best = el;
+                bestOverlap = w * h;
+              }
+            }
+          }
+          // Carousels, tickers and marquees move inside a clipping box; that box, not the moving slide, is what to mask.
+          let target = best;
+          for (let cur = best, depth = 0; cur && cur !== document.body && depth < 6; cur = cur.parentElement ?? undefined, depth++) {
+            if (cur.getBoundingClientRect().height >= pageHeight * 0.9) break;
+            const style = getComputedStyle(cur);
+            if (/hidden|clip|auto|scroll/.test(style.overflowX + style.overflowY)) {
+              target = cur;
+              break;
+            }
+          }
+          const selector = (target && helpers?.cssPath(target)) || undefined;
+          if (selector && out.some((o) => o.selector === selector)) continue;
+          const r = target?.getBoundingClientRect();
+          out.push({ selector, box: r ? { x: Math.round(r.left + ox), y: Math.round(r.top + oy), width: Math.round(r.width), height: Math.round(r.height) } : box });
+        }
+        return out;
+      },
+      { boxes, fullPage },
+    )
+    .catch((error: Error) => {
+      log.debug(`could not name the areas that kept changing: ${error.message.split('\n')[0]}`);
+      return [];
+    });
 }
 
 const MOBILE_UA =
@@ -137,6 +213,9 @@ export class CaptureSession {
       const instant = fixed === 'run-start' ? this.opts.runStart : new Date(fixed);
       if (Number.isNaN(instant.getTime())) throw new UiDiffError(`capture.fixedTime is not a valid date: ${fixed}`);
       await context.clock.setFixedTime(instant);
+    } else if (!motion) {
+      // Time keeps flowing; installed up front so timers can be paused later without performance.now() jumping.
+      await context.clock.install();
     }
     await context.addInitScript({ content: initScript({ stableRandom: cfg.capture.stableRandom, localStorage: theme?.localStorage }) });
     await applyAuth(context, this.opts.auth);
@@ -165,7 +244,11 @@ export class CaptureSession {
     return response?.status();
   }
 
-  async screenshot(page: Page, route: ResolvedRoute, fullPage: boolean): Promise<{ buffer: Buffer; stable: boolean; attempts: number; truncated: boolean }> {
+  async screenshot(
+    page: Page,
+    route: ResolvedRoute,
+    fullPage: boolean,
+  ): Promise<{ buffer: Buffer; stable: boolean; attempts: number; truncated: boolean; unsettled?: UnsettledRegion[]; frozeTimers: boolean }> {
     const { cfg } = this.opts;
     const masks = [...cfg.capture.mask, ...route.mask];
     const hidden = [...cfg.capture.hide, ...route.hide, ...(cfg.capture.hideDevOverlays ? DEV_OVERLAY_SELECTORS : [])];
@@ -195,14 +278,33 @@ export class CaptureSession {
     let previous = await shoot();
     let attempts = 1;
     let streak = 1;
+    let changes = 0;
+    let moving: Box[] = [];
+    let frozeTimers = false;
     while (streak < wanted && attempts < wanted + 3) {
       await page.waitForTimeout(120 * attempts);
       const next = await shoot();
       attempts++;
-      streak = next.equals(previous) ? streak + 1 : 1;
+      if (next.equals(previous)) {
+        streak++;
+      } else {
+        streak = 1;
+        changes++;
+        moving = changedRegions(previous, next);
+        // Changing twice in a row is not a late image or font but something that keeps moving
+        // (requestAnimationFrame, timers): pause the page clock so the screenshot is one frame.
+        if (changes >= 2 && !frozeTimers) {
+          frozeTimers = true;
+          // pauseAt pauses first, so the clock is paused even if it throws because that time has already passed.
+          await page.evaluate(() => Date.now() + 100).then((t) => page.context().clock.pauseAt(t)).catch(() => undefined);
+        }
+      }
       previous = next;
     }
-    return { buffer: previous, stable: streak >= wanted, attempts, truncated };
+    const stable = streak >= wanted;
+    const unsettled = changes >= 2 || !stable ? await describeRegions(page, moving, fullPage) : undefined;
+    if (frozeTimers) await page.context().clock.resume().catch(() => undefined);
+    return { buffer: previous, stable, attempts, truncated, unsettled, frozeTimers };
   }
 
   async capture(target: CaptureTarget): Promise<CaptureRecord> {
@@ -225,6 +327,8 @@ export class CaptureSession {
       mkdirSync(path.dirname(target.file), { recursive: true });
       writeFileSync(target.file, shot.buffer);
       Object.assign(record, { file: target.file, stable: shot.stable, attempts: shot.attempts, truncated: shot.truncated });
+      if (shot.unsettled) record.unsettled = shot.unsettled;
+      if (shot.frozeTimers) record.frozeTimers = true;
       if (target.styles) {
         const snapshot = await page.evaluate(
           ({ max, ignore, extra }) => {

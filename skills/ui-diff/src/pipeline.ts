@@ -17,6 +17,7 @@ import { killAllServers, serverLogWarnings } from './server.js';
 import { SideManager, type Side, type SideRequest } from './sides.js';
 import { describeStep, runSteps } from './steps.js';
 import { aggregateFindings, auditSnapshot, buildTokenSet, detectTokenFiles, findingKeys, hasCategory, loadTokenFiles, tokenColorStrings, type StyleSnapshot, type TokenSet } from './tokens.js';
+import { onlyInUnsettled, unsettledWarning } from './unsettled.js';
 import { VERSION } from './version.js';
 
 export interface RunOptions {
@@ -344,7 +345,7 @@ async function runStaged(opts: RunOptions, finalDir: string): Promise<RunOutcome
         log.step(`capture ${n}/${plans.length * 2}: ${side.name} ${plan.route.path} (${plan.viewport.name}, ${plan.theme.name})`);
         const record = await session.capture(target);
         if (!record.ok) log.warn(`${side.name} ${plan.id}: ${record.error}`);
-        else if (!record.stable) log.warn(`${side.name} ${plan.id}: screenshots kept changing; result may be noisy`);
+        else if (!record.stable || record.unsettled) log.warn(unsettledWarning(`${side.name} ${plan.id}`, record));
         records.set(`${side.name}:${plan.id}`, record);
       }
     }
@@ -368,7 +369,7 @@ async function runStaged(opts: RunOptions, finalDir: string): Promise<RunOutcome
       const h = records.get(`head:${c.id}`);
       for (const [label, r] of [['base', b], ['head', h]] as const) {
         if (r?.pageErrors.length) c.warnings.push(`${label}: uncaught page error: ${r.pageErrors[0]}`);
-        if (r && r.ok && !r.stable) c.warnings.push(`${label}: page did not settle (animations or live data?); consider capture.mask or capture.fixedTime`);
+        if (r && r.ok && (!r.stable || r.unsettled)) c.warnings.push(unsettledWarning(label, r));
       }
       if (b?.truncated || h?.truncated) {
         c.truncated = true;
@@ -468,6 +469,9 @@ function compareCapture(plan: Plan, baseRec: CaptureRecord, headRec: CaptureReco
   if (diff.shifted.length) result.diff.shifted = diff.shifted.map((r) => ({ beforeY: css(r.beforeY), afterY: css(r.afterY), height: css(r.height), dy: css(r.dy) }));
   if (diff.removedRows) result.diff.removedHeight = css(diff.removedRows);
   if (!diff.changed) return result;
+  if (onlyInUnsettled(diff.regions, [...(baseRec.unsettled ?? []), ...(headRec.unsettled ?? [])], scale)) {
+    result.warnings.push('every difference is inside an area that kept changing by itself (see "page did not settle"), so it is probably not caused by this change');
+  }
   const labels = {
     before: `BEFORE ${ctx.base.shortSha ?? 'BASE'}`,
     after: `AFTER ${ctx.head.shortSha ?? 'HEAD'}`,

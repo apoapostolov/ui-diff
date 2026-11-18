@@ -7,7 +7,9 @@
     <link rel="stylesheet" href="styles.css">
     <link rel="stylesheet" href="home.css">
     <script>
-      if (new URLSearchParams(location.search).get('theme') === 'dark') document.documentElement.dataset.theme = 'dark';
+      const params = new URLSearchParams(location.search);
+      if (params.get('theme') === 'dark') document.documentElement.dataset.theme = 'dark';
+      if (params.get('hero')) document.documentElement.dataset.hero = params.get('hero');
     </script>
   </head>
   <body>
@@ -25,14 +27,14 @@
     <main class="container">
       <section class="hero">
         <div class="hero-copy">
-          <h1>Analytics for product teams</h1>
+          <h1>Analytics your whole team will actually use</h1>
           <p>See which features people use, where they get stuck, and what to build next.</p>
           <div class="hero-actions">
             <a class="cta" href="#pricing">Start free trial</a>
             <a class="secondary" href="#features">See how it works</a>
           </div>
         </div>
-        <img class="hero-art" src="assets/chart.svg" width="960" height="320">
+        <img class="hero-art" src="assets/chart.svg" width="960" height="320" alt="Chart of weekly active users rising over eight weeks">
       </section>
 
       <section id="features" class="features">
@@ -52,16 +54,23 @@
 
       <section id="pricing" class="pricing">
         <h2>Pricing</h2>
-        <div class="plans">
+        <div class="tabs" role="tablist" aria-label="Billing period" data-active="monthly">
+          <span class="tab-indicator" aria-hidden="true"></span>
+          <button class="tab" role="tab" aria-selected="true" data-tab="monthly">Monthly</button>
+          <button class="tab" role="tab" aria-selected="false" data-tab="yearly">Yearly</button>
+        </div>
+        <div class="plans" data-billing="monthly">
           <article class="plan">
             <h3>Starter</h3>
-            <p class="price">$0</p>
+            <p class="price"><span class="amount monthly">$0</span><span class="amount yearly">$0</span></p>
             <p>Up to 10k events a month.</p>
           </article>
-          <article class="plan">
+          <article class="plan plan--pro">
+            <span class="badge">Most popular</span>
             <h3>Pro</h3>
-            <p class="price">$29</p>
+            <p class="price"><span class="amount monthly">$29</span><span class="amount yearly">$24</span></p>
             <p>Unlimited events and dashboards.</p>
+            <p class="price-note">Billed yearly saves 17%</p>
           </article>
         </div>
       </section>
@@ -69,10 +78,7 @@
       <section class="newsletter">
         <h2>Product updates</h2>
         <form onsubmit="return false">
-          <div>
-            <label for="email">Work email</label>
-            <input id="email" type="email" placeholder="you@company.com">
-          </div>
+          <input id="email" type="email" placeholder="you@company.com" tabindex="1">
           <button type="submit">Subscribe</button>
         </form>
       </section>
@@ -91,6 +97,15 @@
       const tips = ['Press / to search', 'Pin dashboards to your sidebar', 'Share reports with a link', 'Schedule weekly digests'];
       document.getElementById('tip').textContent = tips[Math.floor(Math.random() * tips.length)];
       document.getElementById('visitors').textContent = String(100 + (Math.floor(performance.now() * 1000) % 900));
+
+      const tabs = document.querySelector('.tabs');
+      for (const tab of document.querySelectorAll('[data-tab]')) {
+        tab.addEventListener('click', () => {
+          tabs.dataset.active = tab.dataset.tab;
+          document.querySelector('.plans').dataset.billing = tab.dataset.tab;
+          for (const other of document.querySelectorAll('[data-tab]')) other.setAttribute('aria-selected', String(other === tab));
+        });
+      }
     </script>
   </body>
 </html>

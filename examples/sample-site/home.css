@@ -1,12 +1,25 @@
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
 .hero {
   padding: var(--space-16) 0 var(--space-12);
 }
 
 .hero h1 {
+  max-width: 760px;
   margin: 0 0 var(--space-4);
   font-size: var(--font-size-5xl);
   line-height: 1.1;
   letter-spacing: -0.02em;
+  animation: rise 600ms ease both;
 }
 
 .hero p {
@@ -19,17 +32,24 @@
 .hero-actions {
   display: flex;
   align-items: center;
-  gap: var(--space-4);
+  gap: var(--space-5);
 }
 
 .cta {
   display: inline-block;
-  padding: 8px 14px;
-  border-radius: var(--radius-sm);
-  background: var(--color-brand-500);
+  padding: var(--space-3) var(--space-6);
+  border-radius: var(--radius-full);
+  background: var(--color-violet-600);
   color: var(--color-neutral-0);
   font-weight: var(--font-weight-semibold);
   text-decoration: none;
+  transition: transform 300ms ease, box-shadow 300ms ease, background-color 300ms ease;
+}
+
+.cta:hover {
+  background: var(--color-violet-500);
+  box-shadow: 0 12px 28px rgba(124, 58, 237, 0.35);
+  transform: translateY(-3px) scale(1.04);
 }
 
 .secondary {
@@ -55,6 +75,7 @@
 
 .card,
 .plan {
+  position: relative;
   padding: var(--space-6);
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
@@ -79,10 +100,69 @@
   font-size: var(--font-size-2xl);
 }
 
+.tabs {
+  position: relative;
+  display: inline-grid;
+  grid-template-columns: 1fr 1fr;
+  margin-bottom: var(--space-6);
+  padding: var(--space-1);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-full);
+  background: var(--surface);
+}
+
+.tab {
+  position: relative;
+  z-index: 1;
+  min-width: 96px;
+  padding: var(--space-2) var(--space-4);
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-weight: var(--font-weight-medium);
+  cursor: pointer;
+}
+
+.tab[aria-selected="true"] {
+  color: var(--color-neutral-0);
+}
+
+.tab-indicator {
+  position: absolute;
+  top: var(--space-1);
+  bottom: var(--space-1);
+  left: var(--space-1);
+  width: calc(50% - var(--space-1));
+  border-radius: var(--radius-full);
+  background: var(--color-violet-600);
+  transition: transform 450ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.tabs[data-active="yearly"] .tab-indicator {
+  transform: translateX(100%);
+}
+
 .plans {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
   gap: var(--space-6);
+}
+
+.plan--pro {
+  border: 2px solid var(--color-violet-600);
+}
+
+.badge {
+  position: absolute;
+  top: -12px;
+  right: var(--space-4);
+  padding: 3px 9px;
+  border-radius: var(--radius-full);
+  background: #ff5a1f;
+  color: var(--color-neutral-0);
+  font-size: 13px;
+  font-weight: var(--font-weight-semibold);
 }
 
 .plan .price {
@@ -91,9 +171,25 @@
   font-weight: var(--font-weight-bold);
 }
 
+.amount.yearly,
+.plans[data-billing="yearly"] .amount.monthly {
+  display: none;
+}
+
+.plans[data-billing="yearly"] .amount.yearly {
+  display: inline;
+  animation: rise 400ms ease both;
+}
+
 .plan p {
   margin: 0;
   color: var(--muted);
+}
+
+.plan .price-note {
+  margin-top: var(--space-2);
+  color: #b4b4b4;
+  font-size: var(--font-size-sm);
 }
 
 .pricing,
@@ -106,13 +202,6 @@
   flex-wrap: wrap;
   align-items: flex-end;
   gap: var(--space-3);
-}
-
-.newsletter label {
-  display: block;
-  margin-bottom: var(--space-1);
-  font-size: var(--font-size-sm);
-  font-weight: var(--font-weight-medium);
 }
 
 .newsletter input {
@@ -133,6 +222,51 @@
   color: var(--bg);
   font: inherit;
   font-weight: var(--font-weight-semibold);
+}
+
+/* Hero variants for review: ?hero=1..4 */
+[data-hero="2"] .hero {
+  text-align: center;
+}
+
+[data-hero="2"] .hero h1,
+[data-hero="2"] .hero p {
+  margin-inline: auto;
+}
+
+[data-hero="2"] .hero-actions {
+  justify-content: center;
+}
+
+[data-hero="3"] .hero {
+  margin: var(--space-8) calc(-1 * var(--space-6)) 0;
+  padding: var(--space-12) var(--space-8);
+  border-radius: var(--radius-lg);
+  background: var(--color-neutral-900);
+  color: var(--color-neutral-0);
+}
+
+[data-hero="3"] .hero p {
+  color: var(--color-neutral-400);
+}
+
+[data-hero="3"] .hero .secondary {
+  color: var(--color-neutral-0);
+}
+
+[data-hero="4"] .hero {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  align-items: center;
+  gap: var(--space-10);
+}
+
+[data-hero="4"] .hero h1 {
+  font-size: var(--font-size-4xl);
+}
+
+[data-hero="4"] .hero-art {
+  margin-top: 0;
 }
 
 @media (max-width: 640px) {

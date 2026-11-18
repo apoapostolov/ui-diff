@@ -48,7 +48,8 @@ export interface RunOutcome {
 }
 
 const FAILED_MARKER = 'last-run-failed.json';
-const OUTPUT_ENTRIES = ['captures', 'diff', 'compare', 'variants', 'motion', 'styles', 'report.json', 'comment.local.md', 'comment.md', 'summary.auto.md', FAILED_MARKER];
+// comment.preview.md comes from `render`; a new successful run makes it stale, so it is dropped with the rest.
+const OUTPUT_ENTRIES = ['captures', 'diff', 'compare', 'variants', 'motion', 'styles', 'report.json', 'comment.local.md', 'comment.md', 'comment.preview.md', 'summary.auto.md', FAILED_MARKER];
 
 export interface RunFailure {
   failedAt: string;

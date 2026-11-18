@@ -58,7 +58,13 @@ export async function mapChangesToRoutes(input: MappingInput): Promise<MappingRe
   };
 
   const hits = new Map<string, RouteHit>();
-  const addHit = (route: ResolvedRoute, reason: string, confidence: Confidence) => {
+  const linked = new Set<string>();
+  const addHit = (route: ResolvedRoute, reason: string, confidence: Confidence, file?: string) => {
+    if (file) {
+      const key = `${file}\0${route.path}`;
+      if (linked.has(key)) return;
+      linked.add(key);
+    }
     const existing = hits.get(route.path);
     if (existing) {
       if (!existing.reasons.includes(reason)) existing.reasons.push(reason);
@@ -84,7 +90,7 @@ export async function mapChangesToRoutes(input: MappingInput): Promise<MappingRe
     for (const route of cfg.routes) {
       const glob = firstMatch(file, route.files);
       if (glob) {
-        addHit(route, `${file} matches ${glob.replace(/^\//, '')}`, 'high');
+        addHit(route, `${file} matches ${glob.replace(/^\//, '')}`, 'high', file);
         matchedFiles.add(file);
       }
     }
@@ -97,7 +103,7 @@ export async function mapChangesToRoutes(input: MappingInput): Promise<MappingRe
     if (hit?.kind === 'page') {
       matchedFiles.add(file);
       if (hit.dynamic) needsExample.push({ file, route: hit.route });
-      else addHit(routeFor(hit.route), `${file} is the ${hit.framework} page for ${hit.route}`, 'high');
+      else addHit(routeFor(hit.route), `${file} is the ${hit.framework} page for ${hit.route}`, 'high', file);
       continue;
     }
     if (hit?.kind === 'layout') {
@@ -177,13 +183,12 @@ export async function mapChangesToRoutes(input: MappingInput): Promise<MappingRe
 
     for (const file of toTrace) {
       const found = findEntries(file, reverse, (f) => entries.has(f));
-      if (entries.has(file)) found.set(file, [file]);
       if (found.size === 0) continue;
       matchedFiles.add(file);
       for (const [entry, chain] of found) {
         for (const route of entries.get(entry) ?? []) {
-          const via = chain.length > 1 ? `${chain[0]} → ${chain.length > 2 ? '… → ' : ''}${entry}` : entry;
-          addHit(route, `imported: ${via}`, chain.length > 1 ? 'medium' : 'high');
+          const via = `${chain[0]} → ${chain.length > 2 ? '… → ' : ''}${entry}`;
+          addHit(route, `imported: ${via}`, 'medium', file);
         }
       }
     }

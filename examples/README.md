@@ -18,7 +18,7 @@ dark theme via `?theme=dark`, variants, a motion script, the token audit against
 The footer shows a frozen clock, a seeded random tip and a masked live counter.
 
 Reproduce from the repository root (if the branch was squash-merged, fetch the original commits
-first with `git fetch origin pull/<PR number>/head`):
+first with `git fetch origin pull/1/head`):
 
 ```bash
 SKILL=skills/ui-diff

@@ -1,10 +1,11 @@
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { after, before, describe, it } from 'node:test';
 import { parseRemoteUrl } from '../../src/git.js';
+import { UiDiffError } from '../../src/log.js';
 import { encodePath, linkBaseFor, listAssetPrs, publishToBranch, pruneBranch, runsToRemove } from '../../src/publish.js';
 
 const git = (cwd: string, ...args: string[]) => execFileSync('git', args, { cwd, encoding: 'utf8' }).trim();
@@ -91,5 +92,71 @@ describe('assets branch publishing', () => {
     assert.equal(linkBaseFor(info, 'ui-diff-assets'), 'https://github.com/acme/web-app/raw/ui-diff-assets');
     assert.deepEqual(parseRemoteUrl('https://x-access-token:abc@ghe.corp.dev/org/sub/repo'), { host: 'ghe.corp.dev', owner: 'org/sub', repo: 'repo' });
     assert.equal(encodePath('pr-1/a b#c.png'), 'pr-1/a%20b%23c.png');
+  });
+});
+
+describe('assets branch with an unreadable remote', () => {
+  let dir: string;
+  let repo: string;
+  let sshLog: string;
+  let file: string;
+  const saved = { ...process.env };
+
+  before(() => {
+    dir = mkdtempSync(path.join(os.tmpdir(), 'ui-diff-remote-errors-'));
+    repo = path.join(dir, 'repo');
+    sshLog = path.join(dir, 'ssh.log');
+    git(dir, 'init', '-q', '-b', 'main', repo);
+    git(repo, 'remote', 'add', 'origin', 'ssh://git@git.example.invalid/acme/app.git');
+    const fakeSsh = path.join(dir, 'fake-ssh');
+    writeFileSync(fakeSsh, '#!/bin/sh\necho "$*" >> "$FAKE_SSH_LOG"\nprintf \'%s\\n\' "$FAKE_SSH_STDERR" >&2\nexit "$FAKE_SSH_EXIT"\n');
+    chmodSync(fakeSsh, 0o755);
+    file = path.join(dir, 'a.png');
+    writeFileSync(file, 'fake a.png');
+    Object.assign(process.env, { GIT_SSH_COMMAND: fakeSsh, GIT_SSH_VARIANT: 'ssh', FAKE_SSH_LOG: sshLog });
+  });
+
+  after(() => {
+    process.env = saved;
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  function remoteSays(stderr: string, exit: number): void {
+    writeFileSync(sshLog, '');
+    Object.assign(process.env, { FAKE_SSH_STDERR: stderr, FAKE_SSH_EXIT: String(exit) });
+  }
+
+  const publish = () =>
+    publishToBranch({ repoRoot: repo, remote: 'origin', branch: 'ui-diff-assets', runDir: 'pr-1/default/20260101T000000Z-aaaaaaa', groupDir: 'pr-1/default', keepRuns: 1, files: [{ local: file, dest: 'a.png' }], message: 'test' });
+
+  it('does not mistake "Repository not found" for a missing branch', async () => {
+    remoteSays('ERROR: Repository not found.', 1);
+    await assert.rejects(publish(), (error: UiDiffError) => {
+      assert.match(error.message, /^Could not read ui-diff-assets from origin: ERROR: Repository not found\./);
+      assert.match(error.hint ?? '', /credentials/);
+      assert.equal(error.exitCode, 3);
+      return true;
+    });
+    assert.doesNotMatch(readFileSync(sshLog, 'utf8'), /git-receive-pack/, 'must not try to create the branch');
+    await assert.rejects(listAssetPrs(repo, 'origin', 'ui-diff-assets'), /Could not read ui-diff-assets/);
+  });
+
+  it('reports network errors as such', async () => {
+    remoteSays('ssh: connect to host git.example.invalid port 22: Connection timed out', 255);
+    await assert.rejects(publish(), (error: UiDiffError) => {
+      assert.match(error.message, /Connection timed out/);
+      assert.match(error.hint ?? '', /network/);
+      assert.equal(error.exitCode, 1);
+      return true;
+    });
+  });
+
+  it('never repeats credentials embedded in a remote URL', async () => {
+    remoteSays("fatal: unable to access 'https://bot:s3cret-token@git.example.invalid/acme/app.git/': The requested URL returned error: 403", 128);
+    await assert.rejects(publish(), (error: UiDiffError) => {
+      assert.doesNotMatch(error.message, /s3cret-token/);
+      assert.match(error.message, /https:\/\/\*\*\*@git\.example\.invalid/);
+      return true;
+    });
   });
 });

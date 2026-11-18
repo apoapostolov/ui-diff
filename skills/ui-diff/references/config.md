@@ -117,7 +117,7 @@ the page loads, e.g. `{ "theme": "dark" }` for next-themes).
 | `hide` | `[]` | Selectors hidden with `visibility: hidden` (layout preserved). |
 | `hideDevOverlays` | `true` | Hides Next.js/Vite/Astro dev overlays and the Vercel toolbar. |
 | `scrollToLoad` | `true` | Scrolls through the page to trigger lazy content, then back to the top. |
-| `stableShots` | `2` | Retake until this many consecutive screenshots are identical. |
+| `stableShots` | `2` | Retake until this many consecutive screenshots are identical. When the page keeps changing (`requestAnimationFrame` or timer animations), its JavaScript timers are paused for the final shots and a "page did not settle" warning names the element to mask. |
 | `settleMs` | `250` | Extra wait before capturing. |
 | `waitUntil` | `"load"` | Plus a bounded wait for network idle (`networkIdleTimeoutMs`, 3000). |
 | `locale` / `timezoneId` | `en-US` / `UTC` | |

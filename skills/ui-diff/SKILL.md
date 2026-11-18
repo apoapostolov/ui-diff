@@ -81,7 +81,8 @@ route × viewport × theme, diffs with pixelmatch, composes `before | after | di
 page plus zoomed crops of the changed areas), runs the enabled extras, and cleans up. Captures are
 deterministic: animations and transitions finished, fonts and images awaited, `Math.random` and
 `crypto` seeded, scrollbars hidden, scroll reset, optional frozen clock and masked selectors, and
-each screenshot is retaken until consecutive shots match.
+each screenshot is retaken until consecutive shots match (if something keeps moving, the page's
+JavaScript timers are paused for the final shots).
 
 The JSON result has `stats`, `changed` (with image paths), `variants`, `motion`, `a11y`, `tokens`,
 `warnings`, `notCaptured` and `unmatchedFiles`. Add `--themes light,dark` when colors or tokens
@@ -112,7 +113,9 @@ Guidelines: lead "worth a look" with likely-unintended changes (a page changed w
 changing, breakage at one viewport, new a11y issues, off-token values). Content that only moved
 (a taller hero pushing sections down) is matched row by row and reported as "shifted down Npx"
 (`diff.shifted` in `report.json`); it is not in the changed percentage, so mention the shift
-without calling the moved sections changed. Say "changed", not
+without calling the moved sections changed. A "page did not settle" warning names an element that
+kept moving by itself (carousel, ticker); when a capture says every difference is inside such an
+area, do not describe it as a change: suggest the `capture.mask` the warning gives. Say "changed", not
 "intentionally changed". Keep it proportional: a one-color tweak gets one bullet. If you cannot
 view images, write from `report.json` and say the screenshots were not reviewed.
 

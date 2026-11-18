@@ -1,7 +1,8 @@
-import { existsSync, readFileSync, realpathSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { z } from 'zod';
 import { UiDiffError } from './log.js';
+import { realpathIfExists } from './paths.js';
 
 const envName = z
   .string()
@@ -418,15 +419,6 @@ export function formatZodError(error: z.ZodError, file: string): string {
 /** Config paths always use "/": a Windows-style "src\\pages" means the same folder, not a glob escape. */
 export function toSlashes(p: string): string {
   return p.replace(/\\/g, '/');
-}
-
-/** Physical path (symlinks resolved) so config and repo paths compare correctly; unchanged when missing. */
-export function realpathIfExists(p: string): string {
-  try {
-    return realpathSync(p);
-  } catch {
-    return p;
-  }
 }
 
 export function parseConfig(raw: unknown, opts: { file?: string; repoRoot: string }): ResolvedConfig {

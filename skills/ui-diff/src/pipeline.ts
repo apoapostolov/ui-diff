@@ -3,7 +3,7 @@ import path from 'node:path';
 import { diffFocusOrder, diffViolations, type A11yIssue } from './a11y.js';
 import { resolveAuth, sanitizeUrl } from './auth.js';
 import { CaptureSession, launchBrowser, routeUrl, type CaptureRecord, type CaptureTarget } from './capture.js';
-import { parseVariantFlag, pickThemes, pickViewports, realpathIfExists, resolveRoute, type ResolvedConfig, type ResolvedRoute, type Step, type ThemeConfig, type VariantSpec, type ViewportConfig } from './config.js';
+import { parseVariantFlag, pickThemes, pickViewports, resolveRoute, type ResolvedConfig, type ResolvedRoute, type Step, type ThemeConfig, type VariantSpec, type ViewportConfig } from './config.js';
 import { detectChanges, resolveBaseRef, type DetectResult } from './detect.js';
 import { composeCompare, diffPngs, focusBoxes } from './diff.js';
 import { git, gitCommonDir, mergeBase, revParse } from './git.js';
@@ -11,6 +11,7 @@ import { COLORS, composeRow, readPng, resizeToWidth, writePng } from './image.js
 import { log, UiDiffError, writeRedacted } from './log.js';
 import { renderComment } from './markdown.js';
 import { distinctFrames, encodeSideBySideGif, motionWarning, moveFile, recordFrames, writeFile, type RawFrame } from './motion.js';
+import { realpathIfExists } from './paths.js';
 import { autoSummary, computeStats, pct, truncationWarning, type CaptureResult, type MotionResult, type Report, type SideSummary, type VariantGroup } from './report.js';
 import { killAllServers } from './server.js';
 import { SideManager, type Side, type SideRequest } from './sides.js';

@@ -42,6 +42,10 @@ export const log = {
   error(message: string): void {
     write(`[ui-diff] error: ${message}`);
   },
+  /** Shown even with --quiet: it tells the user how to fix the error just printed. */
+  hint(message: string): void {
+    write(`[ui-diff] hint: ${message}`);
+  },
   debug(message: string): void {
     if (verbose) write(`[ui-diff] debug: ${message}`);
   },

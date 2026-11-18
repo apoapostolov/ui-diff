@@ -1,5 +1,5 @@
 import { spawn, type ChildProcess } from 'node:child_process';
-import { closeSync, mkdirSync, openSync, readFileSync } from 'node:fs';
+import { closeSync, existsSync, mkdirSync, openSync, readFileSync } from 'node:fs';
 import net from 'node:net';
 import path from 'node:path';
 import { log, UiDiffError } from './log.js';
@@ -27,6 +27,20 @@ export interface RunningServer {
   url: string;
   logFile: string;
   stop(): Promise<void>;
+}
+
+/**
+ * Why a dev server did not become ready. Only `exited` and `http-error` can be caused by the
+ * dependencies, so only those justify retrying with a clean install.
+ */
+export type StartFailure = 'exited' | 'http-error' | 'unreachable';
+
+export class ServerStartError extends UiDiffError {
+  readonly reason: StartFailure;
+  constructor(message: string, reason: StartFailure, hint?: string) {
+    super(message, { hint });
+    this.reason = reason;
+  }
 }
 
 const running = new Set<ChildProcess>();
@@ -59,24 +73,72 @@ function tail(file: string, lines = 25): string {
   }
 }
 
+const LOOPBACK_HOSTS = ['localhost', '127.0.0.1', '[::1]'];
+
+/**
+ * URLs to probe for a local dev server: the configured one first, then the same URL on the other
+ * loopback hosts. Dev servers bind "localhost" differently (Vite: often IPv6 ::1 only; Python's
+ * http.server: 127.0.0.1 only), so a fixed host misses some of them.
+ */
+export function loopbackCandidates(url: string): string[] {
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    return [url];
+  }
+  if (!LOOPBACK_HOSTS.includes(parsed.hostname)) return [url];
+  const out = [parsed.toString()];
+  for (const host of LOOPBACK_HOSTS) {
+    const candidate = new URL(parsed.toString());
+    candidate.hostname = host;
+    if (!out.includes(candidate.toString())) out.push(candidate.toString());
+  }
+  return out;
+}
+
+/** `base` with its host replaced by the host of `answered` (the loopback URL that responded). */
+export function withHostOf(base: string, answered: string): string {
+  const out = new URL(base);
+  out.hostname = new URL(answered).hostname;
+  return out.toString().replace(/\/$/, '');
+}
+
+export interface ReadyResult {
+  url: string;
+  status: number;
+}
+
 export async function waitForUrl(
-  url: string,
-  opts: { timeoutMs: number; isAlive?: () => boolean; headers?: Record<string, string>; intervalMs?: number },
-): Promise<number> {
-  const deadline = Date.now() + opts.timeoutMs;
+  urls: string | string[],
+  opts: { timeoutMs: number; isAlive?: () => boolean; headers?: Record<string, string>; intervalMs?: number; failOn5xxAfterMs?: number },
+): Promise<ReadyResult> {
+  const candidates = Array.isArray(urls) ? urls : [urls];
+  const started = Date.now();
+  const deadline = started + opts.timeoutMs;
   let lastError = '';
+  let first5xx: number | undefined;
   while (Date.now() < deadline) {
-    if (opts.isAlive && !opts.isAlive()) throw new UiDiffError(`Server exited before ${url} became ready`);
-    try {
-      const response = await fetch(url, { headers: opts.headers, redirect: 'manual', signal: AbortSignal.timeout(5000) });
-      if (response.status < 500) return response.status;
-      lastError = `HTTP ${response.status}`;
-    } catch (error) {
-      lastError = (error as Error).message;
+    if (opts.isAlive && !opts.isAlive()) throw new ServerStartError(`server exited before ${candidates[0]} became ready`, 'exited');
+    for (const url of candidates) {
+      try {
+        const response = await fetch(url, { headers: opts.headers, redirect: 'manual', signal: AbortSignal.timeout(5000) });
+        if (response.status < 500) return { url, status: response.status };
+        lastError = `HTTP ${response.status}`;
+        first5xx ??= Date.now();
+      } catch (error) {
+        const cause = (error as { cause?: { code?: string; message?: string } }).cause;
+        if (!lastError.startsWith('HTTP')) lastError = cause?.code ?? cause?.message ?? (error as Error).message;
+      }
+    }
+    if (first5xx !== undefined && opts.failOn5xxAfterMs !== undefined && Date.now() - first5xx > opts.failOn5xxAfterMs) {
+      throw new ServerStartError(`${candidates[0]} kept answering ${lastError}`, 'http-error');
     }
     await new Promise((r) => setTimeout(r, opts.intervalMs ?? 400));
   }
-  throw new UiDiffError(`Timed out after ${Math.round(opts.timeoutMs / 1000)}s waiting for ${url} (${lastError})`);
+  const seconds = Math.round(opts.timeoutMs / 1000);
+  if (first5xx !== undefined) throw new ServerStartError(`timed out after ${seconds}s: ${candidates[0]} answered ${lastError}`, 'http-error');
+  throw new ServerStartError(`timed out after ${seconds}s: nothing answered at ${candidates.join(', ')} (${lastError || 'no response'})`, 'unreachable');
 }
 
 /** Runs a shell command to completion, streaming output to a log file. */
@@ -100,6 +162,24 @@ export function runLogged(command: string, opts: { cwd: string; env: NodeJS.Proc
   });
 }
 
+/** Known dev-server log lines that mean the captures may not show the real UI. */
+export function serverLogWarnings(logFile: string, label: string): string[] {
+  let text: string;
+  try {
+    text = readFileSync(logFile, 'utf8');
+  } catch {
+    return [];
+  }
+  const warnings: string[] = [];
+  const blocked = /Blocked cross-origin request to Next\.js dev resource \S+ from "([^"]+)"/.exec(text);
+  if (blocked) {
+    warnings.push(
+      `${label}: Next.js blocked its dev resources for "${blocked[1]}", so client components may not have hydrated; use "baseUrl": "http://localhost:{port}" (or add the host to allowedDevOrigins).`,
+    );
+  }
+  return warnings;
+}
+
 export async function startServer(opts: {
   label: string;
   command: string;
@@ -110,7 +190,14 @@ export async function startServer(opts: {
   env: NodeJS.ProcessEnv;
   logFile: string;
   timeoutMs: number;
+  /** Give up early when the server only answers 5xx for this long (used when a retry may fix it). */
+  failOn5xxAfterMs?: number;
 }): Promise<RunningServer> {
+  if (!existsSync(opts.cwd)) {
+    throw new UiDiffError(`${opts.label}: directory ${opts.cwd} does not exist`, {
+      hint: '"cwd" in ui-diff.config.json is relative to the config file and uses forward slashes.',
+    });
+  }
   mkdirSync(path.dirname(opts.logFile), { recursive: true });
   const fd = openSync(opts.logFile, 'a');
   const command = fillPort(opts.command, opts.port);
@@ -125,6 +212,12 @@ export async function startServer(opts: {
   closeSync(fd);
   running.add(child);
   let exited = false;
+  let spawnError: Error | undefined;
+  child.on('error', (error) => {
+    spawnError = error;
+    exited = true;
+    running.delete(child);
+  });
   child.on('exit', () => {
     exited = true;
     running.delete(child);
@@ -137,13 +230,20 @@ export async function startServer(opts: {
     if (!exited) killGroup(child, 'SIGKILL');
     running.delete(child);
   };
+  let ready: ReadyResult;
   try {
-    await waitForUrl(opts.readyUrl, { timeoutMs: opts.timeoutMs, isAlive: () => !exited });
+    ready = await waitForUrl(loopbackCandidates(opts.readyUrl), { timeoutMs: opts.timeoutMs, isAlive: () => !exited, failOn5xxAfterMs: opts.failOn5xxAfterMs });
   } catch (error) {
     await stop();
-    throw new UiDiffError(`${opts.label} server did not start: ${(error as Error).message}\n${tail(opts.logFile)}`, {
-      hint: `Check startCommand/baseUrl in ui-diff.config.json. Full log: ${opts.logFile}`,
-    });
+    const reason: StartFailure = error instanceof ServerStartError ? error.reason : 'exited';
+    const detail = spawnError ? `could not run the start command (${spawnError.message})` : (error as Error).message;
+    const hints: Record<StartFailure, string> = {
+      exited: `The start command exited; see the log. Full log: ${opts.logFile}`,
+      'http-error': `The app started but answers with server errors; see the log. Full log: ${opts.logFile}`,
+      unreachable: `The process is running but nothing answers on port ${opts.port}. Make sure startCommand passes {port} (or reads PORT) and that baseUrl matches; if the app is just slow to boot, raise startTimeoutMs (now ${Math.round(opts.timeoutMs / 1000)}s). Full log: ${opts.logFile}`,
+    };
+    throw new ServerStartError(`${opts.label} server did not start: ${detail}\n${tail(opts.logFile)}`, reason, hints[reason]);
   }
-  return { label: opts.label, port: opts.port, url: opts.url, logFile: opts.logFile, stop };
+  if (ready.url !== opts.readyUrl) log.debug(`${opts.label}: answering on ${new URL(ready.url).host} instead of ${new URL(opts.readyUrl).host}`);
+  return { label: opts.label, port: opts.port, url: withHostOf(opts.url, ready.url), logFile: opts.logFile, stop };
 }

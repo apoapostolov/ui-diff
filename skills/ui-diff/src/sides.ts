@@ -7,7 +7,7 @@ import { assertSafePreviewUrl, sanitizeUrl } from './auth.js';
 import type { ResolvedConfig } from './config.js';
 import { addWorktree, removeWorktree, revParse, shortSha, snapshotWorkingTree, untrackedFiles } from './git.js';
 import { log, UiDiffError } from './log.js';
-import { fillPort, getFreePort, runLogged, startServer, type RunningServer } from './server.js';
+import { fillPort, getFreePort, runLogged, ServerStartError, startServer, type RunningServer } from './server.js';
 
 export type SideName = 'base' | 'head';
 
@@ -109,6 +109,9 @@ export function planInstall(cfg: ResolvedConfig, worktreeRoot: string): InstallP
   const lock = LOCKFILES.find((l) => existsSync(path.join(lockDir, l.file)))!;
   const rel = path.relative(worktreeRoot, lockDir);
   const mainLockDir = path.join(cfg.repoRoot, rel);
+  if (usesNext(pkgDir)) {
+    return { kind: 'command', command: lock.command, dir: lockDir, reason: 'Next.js (Turbopack) does not follow node_modules symlinks that point outside the project' };
+  }
   const hash = lockfileHash(path.join(lockDir, lock.file));
   if (hash && hash === lockfileHash(path.join(mainLockDir, lock.file)) && existsSync(path.join(mainLockDir, 'node_modules'))) {
     return { kind: 'link', dir: lockDir, reason: `${lock.file} matches your checkout` };
@@ -138,6 +141,18 @@ export class SharedInstalls {
     return undefined;
   }
 }
+
+function usesNext(pkgDir: string): boolean {
+  try {
+    const pkg = JSON.parse(readFileSync(path.join(pkgDir, 'package.json'), 'utf8')) as { dependencies?: Record<string, string>; devDependencies?: Record<string, string> };
+    return Boolean(pkg.dependencies?.next ?? pkg.devDependencies?.next);
+  } catch {
+    return false;
+  }
+}
+
+/** How long a server started with linked dependencies may answer only 5xx before ui-diff retries with a clean install. */
+const LINKED_5XX_GRACE_MS = 30000;
 
 function linkAll(cfg: ResolvedConfig, worktreeRoot: string, lockDir: string, fromRoot = cfg.repoRoot): void {
   const rel = path.relative(worktreeRoot, lockDir);
@@ -229,6 +244,11 @@ export class SideManager {
     const logDir = path.join(this.opts.outDir, 'logs');
     const env = { ...process.env, ...cfg.env };
     const appDir = path.join(dir, cfg.dirRel, cfg.cwd);
+    if (!existsSync(appDir)) {
+      throw new UiDiffError(`${request.name}: the app directory "${path.posix.join(cfg.dirRel, cfg.cwd)}" does not exist at ${sha.slice(0, 7)}`, {
+        hint: '"cwd" in ui-diff.config.json is relative to the config file and uses forward slashes.',
+      });
+    }
     const plan = planInstall(cfg, dir);
     let linked = plan.kind === 'link';
     if (plan.kind === 'link') {
@@ -251,7 +271,7 @@ export class SideManager {
       await runLogged(cfg.buildCommand, { cwd: appDir, env, logFile: path.join(logDir, `build-${request.name}.log`), label: `${request.name} build` });
     }
 
-    const start = async (): Promise<RunningServer> => {
+    const start = async (linkedDeps: boolean): Promise<RunningServer> => {
       const port = await getFreePort();
       const url = fillPort(cfg.baseUrl, port).replace(/\/$/, '');
       return startServer({
@@ -264,14 +284,15 @@ export class SideManager {
         env,
         logFile: path.join(logDir, `server-${request.name}.log`),
         timeoutMs: cfg.startTimeoutMs,
+        failOn5xxAfterMs: linkedDeps ? LINKED_5XX_GRACE_MS : undefined,
       });
     };
     log.step(`${request.name}: starting server`);
     let server: RunningServer;
     try {
-      server = await start();
+      server = await start(linked);
     } catch (error) {
-      if (!linked) throw error;
+      if (!linked || (error instanceof ServerStartError && error.reason === 'unreachable')) throw error;
       log.warn(`${request.name}: server failed with linked dependencies, retrying with a clean install`);
       unlinkAll(dir, cfg, plan.dir!);
       const fallback = planInstall({ ...cfg, install: 'auto' }, dir);
@@ -282,7 +303,7 @@ export class SideManager {
         logFile: path.join(logDir, `install-${request.name}.log`),
         label: `${request.name} install`,
       });
-      server = await start();
+      server = await start(false);
     }
     const short = await shortSha(sha, cfg.repoRoot);
     const display = request.workingTree ? 'working tree' : (request.displayRef ?? request.ref);

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import http from 'node:http';
 import type { AddressInfo } from 'node:net';
 import os from 'node:os';
@@ -301,6 +301,25 @@ describe('protected previews', { timeout: 120_000 }, () => {
       }
     } finally {
       delete process.env.UI_DIFF_TEST_TOKEN;
+    }
+  });
+});
+
+describe('broken start configuration', { timeout: 60_000 }, () => {
+  it('fails clearly on a missing app directory and leaves no worktrees behind', async () => {
+    const dir = mkdtempSync(path.join(os.tmpdir(), 'ui-diff-badcwd-'));
+    try {
+      git(dir, 'init', '-q', '-b', 'main', dir);
+      writeFileSync(path.join(dir, 'index.html'), '<h1>hi</h1>');
+      writeFileSync(path.join(dir, 'ui-diff.config.json'), JSON.stringify({ startCommand: 'python3 -m http.server {port}', cwd: '.\\site', routes: ['/'] }));
+      const sha = commit(dir, 'init');
+      const before = readdirSync(os.tmpdir()).filter((d) => d.startsWith('ui-diff-') && !d.startsWith('ui-diff-badcwd-'));
+      await assert.rejects(runPipeline({ cfg: loadConfig(dir, dir), outDir: path.join(dir, '.ui-diff'), base: sha, head: sha, allRoutes: true }), /does not exist/);
+      assert.equal(git(dir, 'worktree', 'list').split('\n').length, 1);
+      const after = readdirSync(os.tmpdir()).filter((d) => d.startsWith('ui-diff-') && !d.startsWith('ui-diff-badcwd-'));
+      assert.deepEqual(after.filter((d) => !before.includes(d)), []);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
     }
   });
 });

@@ -86,7 +86,8 @@ JavaScript timers are paused for the final shots).
 
 The JSON result has `stats`, `changed` (with image paths), `variants`, `motion`, `a11y`, `tokens`,
 `warnings`, `notCaptured` and `unmatchedFiles`. Add `--themes light,dark` when colors or tokens
-changed. If it fails, the error names the step and the log in `.ui-diff/logs/`; fix the cause
+changed. If it fails, the error names the step and the log in `.ui-diff/logs/` (common causes and
+fixes: `references/troubleshooting.md`); fix the cause
 (missing env var, wrong `startCommand`, auth) and rerun. Never post a one-sided result. A capture
 whose page returns HTTP 4xx/5xx is reported as failed, not as "unchanged".
 A failed run keeps the previous report in `.ui-diff/` (`render` and `publish` warn that it is from
@@ -168,4 +169,5 @@ After a PR closes, `node "$SKILL/bin/ui-diff.mjs" prune --closed` removes its im
 | Accessibility delta | `--a11y` or `a11y.enabled` | axe-core on both sides; only new and fixed issues (contrast, labels, focus), plus tab-order changes. |
 
 Details and examples: `references/extras.md`. All config options: `references/config.md`.
-Hosting trade-offs and protected previews: `references/privacy.md`.
+Hosting trade-offs and protected previews: `references/privacy.md`. Failures and flaky captures:
+`references/troubleshooting.md`.

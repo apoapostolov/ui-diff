@@ -88,6 +88,8 @@ The JSON result has `stats`, `changed` (with image paths), `variants`, `motion`,
 changed. If it fails, the error names the step and the log in `.ui-diff/logs/`; fix the cause
 (missing env var, wrong `startCommand`, auth) and rerun. Never post a one-sided result. A capture
 whose page returns HTTP 4xx/5xx is reported as failed, not as "unchanged".
+A failed run keeps the previous report in `.ui-diff/` (`render` and `publish` warn that it is from
+an earlier run): do not publish until a rerun succeeds.
 
 ## 4. Review and write the UX summary
 

@@ -1,4 +1,5 @@
 import { execFileSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { copyFileSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, symlinkSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -55,12 +56,21 @@ function findUp(start: string, stop: string, predicate: (dir: string) => boolean
   }
 }
 
-function sameFile(a: string, b: string): boolean {
+/**
+ * Content hash of a lockfile that ignores line endings and trailing whitespace, so a checkout
+ * with CRLF endings (or an editor's trailing newline) still counts as the same dependency set.
+ */
+export function lockfileHash(file: string): string | undefined {
+  let data: Buffer;
   try {
-    return readFileSync(a).equals(readFileSync(b));
+    data = readFileSync(file);
   } catch {
-    return false;
+    return undefined;
   }
+  const hash = createHash('sha256');
+  if (file.endsWith('.lockb')) hash.update(data);
+  else hash.update(data.toString('utf8').replace(/\r\n?/g, '\n').replace(/[ \t]+$/gm, '').replace(/\n+$/, ''));
+  return hash.digest('hex');
 }
 
 /**
@@ -79,11 +89,13 @@ export function linkNodeModules(fromDir: string, toDir: string): boolean {
   return true;
 }
 
-interface InstallPlan {
+export interface InstallPlan {
   kind: 'none' | 'link' | 'command';
   command?: string;
   dir?: string;
   reason: string;
+  /** Lockfile identity (path + content hash): sides with the same key can share one install. */
+  lockKey?: string;
 }
 
 export function planInstall(cfg: ResolvedConfig, worktreeRoot: string): InstallPlan {
@@ -97,17 +109,41 @@ export function planInstall(cfg: ResolvedConfig, worktreeRoot: string): InstallP
   const lock = LOCKFILES.find((l) => existsSync(path.join(lockDir, l.file)))!;
   const rel = path.relative(worktreeRoot, lockDir);
   const mainLockDir = path.join(cfg.repoRoot, rel);
-  if (sameFile(path.join(lockDir, lock.file), path.join(mainLockDir, lock.file)) && existsSync(path.join(mainLockDir, 'node_modules'))) {
+  const hash = lockfileHash(path.join(lockDir, lock.file));
+  if (hash && hash === lockfileHash(path.join(mainLockDir, lock.file)) && existsSync(path.join(mainLockDir, 'node_modules'))) {
     return { kind: 'link', dir: lockDir, reason: `${lock.file} matches your checkout` };
   }
-  return { kind: 'command', command: lock.command, dir: lockDir, reason: `${lock.file} differs from your checkout` };
+  return { kind: 'command', command: lock.command, dir: lockDir, reason: `${lock.file} differs from your checkout`, lockKey: hash ? `${rel}|${lock.file}|${hash}` : undefined };
 }
 
-function linkAll(cfg: ResolvedConfig, worktreeRoot: string, lockDir: string): void {
+/**
+ * Base and head often share a lockfile that differs from your checkout: the first side installs,
+ * the other links to its node_modules instead of installing the same dependencies again.
+ */
+export class SharedInstalls {
+  private readonly installs = new Map<string, Promise<string>>();
+
+  /** Runs `install` once per key. Returns the worktree root to link from when another side already installed. */
+  async run(key: string, root: string, install: () => Promise<void>): Promise<string | undefined> {
+    const first = this.installs.get(key);
+    if (first) {
+      const from = await first.catch(() => undefined);
+      if (from) return from;
+      await install();
+      return undefined;
+    }
+    const pending = install().then(() => root);
+    this.installs.set(key, pending);
+    await pending;
+    return undefined;
+  }
+}
+
+function linkAll(cfg: ResolvedConfig, worktreeRoot: string, lockDir: string, fromRoot = cfg.repoRoot): void {
   const rel = path.relative(worktreeRoot, lockDir);
-  linkNodeModules(path.join(cfg.repoRoot, rel), lockDir);
+  linkNodeModules(path.join(fromRoot, rel), lockDir);
   const appDir = path.join(worktreeRoot, cfg.dirRel, cfg.cwd);
-  if (appDir !== lockDir) linkNodeModules(path.join(cfg.repoRoot, cfg.dirRel, cfg.cwd), appDir);
+  if (appDir !== lockDir) linkNodeModules(path.join(fromRoot, cfg.dirRel, cfg.cwd), appDir);
 }
 
 function unlinkAll(worktreeRoot: string, cfg: ResolvedConfig, lockDir: string): void {
@@ -120,6 +156,7 @@ function unlinkAll(worktreeRoot: string, cfg: ResolvedConfig, lockDir: string): 
 export class SideManager {
   private tmpRoot?: string;
   private readonly worktrees: string[] = [];
+  private readonly installs = new SharedInstalls();
   readonly sides: Side[] = [];
 
   constructor(
@@ -193,12 +230,21 @@ export class SideManager {
     const env = { ...process.env, ...cfg.env };
     const appDir = path.join(dir, cfg.dirRel, cfg.cwd);
     const plan = planInstall(cfg, dir);
+    let linked = plan.kind === 'link';
     if (plan.kind === 'link') {
       log.step(`${request.name}: reusing installed dependencies (${plan.reason})`);
       linkAll(cfg, dir, plan.dir!);
     } else if (plan.kind === 'command') {
-      log.step(`${request.name}: installing dependencies (${plan.reason}): ${plan.command}`);
-      await runLogged(plan.command!, { cwd: plan.dir!, env, logFile: path.join(logDir, `install-${request.name}.log`), label: `${request.name} install` });
+      const install = async () => {
+        log.step(`${request.name}: installing dependencies (${plan.reason}): ${plan.command}`);
+        await runLogged(plan.command!, { cwd: plan.dir!, env, logFile: path.join(logDir, `install-${request.name}.log`), label: `${request.name} install` });
+      };
+      const from = plan.lockKey ? await this.installs.run(plan.lockKey, dir, install) : (await install(), undefined);
+      if (from) {
+        log.step(`${request.name}: reusing dependencies installed for the other side (same lockfile)`);
+        linkAll(cfg, dir, plan.dir!, from);
+        linked = true;
+      }
     }
     if (cfg.buildCommand) {
       log.step(`${request.name}: building`);
@@ -225,7 +271,7 @@ export class SideManager {
     try {
       server = await start();
     } catch (error) {
-      if (plan.kind !== 'link') throw error;
+      if (!linked) throw error;
       log.warn(`${request.name}: server failed with linked dependencies, retrying with a clean install`);
       unlinkAll(dir, cfg, plan.dir!);
       const fallback = planInstall({ ...cfg, install: 'auto' }, dir);

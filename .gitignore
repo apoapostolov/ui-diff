@@ -1,0 +1,11 @@
+node_modules/
+dist/
+*.log
+.DS_Store
+
+# ui-diff output: never commit runs, reports or screenshots
+.ui-diff/
+.ui-diff-*/
+ui-diff-runs/
+ui-diff-output/
+.ui-diff-worktrees/

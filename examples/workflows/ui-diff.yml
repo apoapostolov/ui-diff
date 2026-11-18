@@ -1,0 +1,81 @@
+# Copy to .github/workflows/ui-diff.yml in the app repository.
+# Assumes the skill is committed to the app repo (./install.sh --claude --project <app>), so CI
+# needs no access to the private ui-diff repository.
+name: ui-diff
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+
+permissions:
+  contents: write # push screenshots to the ui-diff-assets branch of this repository
+  pull-requests: write # create / update the sticky comment
+
+concurrency:
+  group: ui-diff-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  ui-diff:
+    # Fork PRs get a read-only token; skip them instead of using pull_request_target,
+    # which would run untrusted code with a write token.
+    if: github.event.pull_request.head.repo.full_name == github.repository && !github.event.pull_request.draft
+    runs-on: ubuntu-latest
+    env:
+      SKILL: .claude/skills/ui-diff
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+
+      # The app's package manager is picked from its lockfile (pnpm, yarn, bun or npm).
+      # The skill itself always installs with npm from its own package-lock.json.
+      - name: Detect the package manager
+        id: pm
+        run: |
+          if [ -f pnpm-lock.yaml ]; then echo "name=pnpm" >> "$GITHUB_OUTPUT"; echo "install=pnpm install --frozen-lockfile" >> "$GITHUB_OUTPUT"
+          elif [ -f yarn.lock ]; then echo "name=yarn" >> "$GITHUB_OUTPUT"; echo "install=yarn install --immutable" >> "$GITHUB_OUTPUT"
+          elif [ -f bun.lock ] || [ -f bun.lockb ]; then echo "name=bun" >> "$GITHUB_OUTPUT"; echo "install=bun install --frozen-lockfile" >> "$GITHUB_OUTPUT"
+          else echo "name=npm" >> "$GITHUB_OUTPUT"; echo "install=npm ci" >> "$GITHUB_OUTPUT"; fi
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Enable pnpm / yarn through Corepack
+        if: steps.pm.outputs.name == 'pnpm' || steps.pm.outputs.name == 'yarn'
+        run: corepack enable
+
+      - uses: oven-sh/setup-bun@v2
+        if: steps.pm.outputs.name == 'bun'
+
+      - name: Install app dependencies
+        run: ${{ steps.pm.outputs.install }}
+
+      - name: Install ui-diff and Chromium
+        run: |
+          npm --prefix "$SKILL" ci --no-audit --no-fund
+          npx --prefix "$SKILL" playwright install --with-deps chromium
+
+      - name: Capture and diff
+        run: >
+          node "$SKILL/bin/ui-diff.mjs" run
+          --base "origin/${{ github.base_ref }}"
+          --head "${{ github.event.pull_request.head.sha }}"
+        # Protected previews instead of local worktrees:
+        #   --base-url https://app-git-main-acme.vercel.app --head-url ${{ steps.preview.outputs.url }}
+        # env:
+        #   VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
+
+      - name: Publish the sticky comment
+        run: node "$SKILL/bin/ui-diff.mjs" publish --pr ${{ github.event.pull_request.number }}
+
+      - name: Keep the full report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ui-diff-report
+          path: .ui-diff
+          retention-days: 14

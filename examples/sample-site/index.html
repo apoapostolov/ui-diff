@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Acme Analytics</title>
+    <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="home.css">
+    <script>
+      const params = new URLSearchParams(location.search);
+      if (params.get('theme') === 'dark') document.documentElement.dataset.theme = 'dark';
+      if (params.get('hero')) document.documentElement.dataset.hero = params.get('hero');
+    </script>
+  </head>
+  <body>
+    <header class="site-header">
+      <div class="container">
+        <a class="logo" href="/">Acme Analytics</a>
+        <nav class="nav" aria-label="Main">
+          <a href="#features">Features</a>
+          <a href="#pricing">Pricing</a>
+          <a href="/about.html">About</a>
+        </nav>
+      </div>
+    </header>
+
+    <main class="container">
+      <section class="hero">
+        <div class="hero-copy">
+          <h1>Analytics your whole team will actually use</h1>
+          <p>See which features people use, where they get stuck, and what to build next.</p>
+          <div class="hero-actions">
+            <a class="cta" href="#pricing">Start free trial</a>
+            <a class="secondary" href="#features">See how it works</a>
+          </div>
+        </div>
+        <img class="hero-art" src="assets/chart.svg" width="960" height="320" alt="Chart of weekly active users rising over eight weeks">
+      </section>
+
+      <section id="features" class="features">
+        <article class="card">
+          <h3>Funnels</h3>
+          <p>Find the step where users drop off.</p>
+        </article>
+        <article class="card">
+          <h3>Retention</h3>
+          <p>Know who comes back, and why.</p>
+        </article>
+        <article class="card">
+          <h3>Dashboards</h3>
+          <p>Share live numbers with the whole team.</p>
+        </article>
+      </section>
+
+      <section id="pricing" class="pricing">
+        <h2>Pricing</h2>
+        <div class="tabs" role="tablist" aria-label="Billing period" data-active="monthly">
+          <span class="tab-indicator" aria-hidden="true"></span>
+          <button class="tab" role="tab" aria-selected="true" data-tab="monthly">Monthly</button>
+          <button class="tab" role="tab" aria-selected="false" data-tab="yearly">Yearly</button>
+        </div>
+        <div class="plans" data-billing="monthly">
+          <article class="plan">
+            <h3>Starter</h3>
+            <p class="price"><span class="amount monthly">$0</span><span class="amount yearly">$0</span></p>
+            <p>Up to 10k events a month.</p>
+          </article>
+          <article class="plan plan--pro">
+            <span class="badge">Most popular</span>
+            <h3>Pro</h3>
+            <p class="price"><span class="amount monthly">$29</span><span class="amount yearly">$24</span></p>
+            <p>Unlimited events and dashboards.</p>
+            <p class="price-note">Billed yearly saves 17%</p>
+          </article>
+        </div>
+      </section>
+
+      <section class="newsletter">
+        <h2>Product updates</h2>
+        <form onsubmit="return false">
+          <input id="email" type="email" placeholder="you@company.com" tabindex="1">
+          <button type="submit">Subscribe</button>
+        </form>
+      </section>
+    </main>
+
+    <footer class="site-footer">
+      <div class="container">
+        <span>Last updated <span id="updated"></span></span>
+        <span>Tip: <span id="tip"></span></span>
+        <span class="live" data-ui-diff-mask>Live visitors: <span id="visitors"></span></span>
+      </div>
+    </footer>
+
+    <script>
+      document.getElementById('updated').textContent = new Date().toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short', timeZone: 'UTC' });
+      const tips = ['Press / to search', 'Pin dashboards to your sidebar', 'Share reports with a link', 'Schedule weekly digests'];
+      document.getElementById('tip').textContent = tips[Math.floor(Math.random() * tips.length)];
+      document.getElementById('visitors').textContent = String(100 + (Math.floor(performance.now() * 1000) % 900));
+
+      const tabs = document.querySelector('.tabs');
+      for (const tab of document.querySelectorAll('[data-tab]')) {
+        tab.addEventListener('click', () => {
+          tabs.dataset.active = tab.dataset.tab;
+          document.querySelector('.plans').dataset.billing = tab.dataset.tab;
+          for (const other of document.querySelectorAll('[data-tab]')) other.setAttribute('aria-selected', String(other === tab));
+        });
+      }
+    </script>
+  </body>
+</html>

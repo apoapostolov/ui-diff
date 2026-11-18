@@ -1,0 +1,34 @@
+{
+  "startCommand": "node serve.mjs --port {port}",
+  "baseUrl": "http://127.0.0.1:{port}",
+  "routes": [
+    {
+      "path": "/",
+      "name": "home",
+      "files": ["index.html", "home.css", "assets/**"],
+      "variants": { "param": "hero", "values": "1..4", "viewports": ["desktop"] },
+      "motion": {
+        "steps": [{ "wait": 400 }, { "hover": ".cta" }, { "wait": 700 }, { "click": "[data-tab=yearly]" }, { "wait": 900 }],
+        "durationMs": 3200
+      }
+    },
+    { "path": "/about.html", "name": "about", "files": ["about.html"] }
+  ],
+  "globalFiles": ["styles.css", "tokens.css"],
+  "viewports": [
+    { "name": "desktop", "width": 1280, "height": 800 },
+    { "name": "mobile", "width": 390, "height": 844, "deviceScaleFactor": 2, "isMobile": true, "hasTouch": true }
+  ],
+  "themes": [
+    { "name": "light", "colorScheme": "light" },
+    { "name": "dark", "colorScheme": "dark", "query": { "theme": "dark" } }
+  ],
+  "capture": {
+    "fixedTime": "2026-01-15T09:30:00Z",
+    "mask": ["[data-ui-diff-mask]"]
+  },
+  "motion": { "enabled": true, "format": "gif+webm" },
+  "tokens": { "enabled": true, "files": ["tokens.json"] },
+  "a11y": { "enabled": true },
+  "comment": { "title": "UI diff" }
+}

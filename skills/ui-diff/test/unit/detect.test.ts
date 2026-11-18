@@ -122,12 +122,12 @@ describe('imports', () => {
     const files: Record<string, string> = {
       'package.json': JSON.stringify({ name: 'web', imports: { '#/*': './src/*' } }),
       'src/routes/__root.tsx': 'export const Route = 1;',
-      'src/routes/_marketing/products.tsx': "import { Hero } from '#/components/hero';",
+      'src/routes/_marketing/pricing.tsx': "import { Hero } from '#/components/hero';",
       'src/routes/_marketing/index.tsx': "import { Footer } from '#/components/footer';",
       'src/components/hero.tsx': 'export const Hero = 1;',
       'src/components/footer.tsx': 'export const Footer = 1;',
     };
     const result = await mapChangesToRoutes({ cfg, changed: changed('src/components/hero.tsx'), headFiles: Object.keys(files), readFiles: reader(files) });
-    assert.deepEqual(result.routes.map((r) => r.route.path), ['/products']);
+    assert.deepEqual(result.routes.map((r) => r.route.path), ['/pricing']);
   });
 });

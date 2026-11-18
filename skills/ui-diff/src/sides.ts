@@ -1,3 +1,4 @@
+import { execFileSync } from 'node:child_process';
 import { copyFileSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, symlinkSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -139,6 +140,9 @@ export class SideManager {
 
   private fromUrl(request: SideRequest): Side {
     const url = assertSafePreviewUrl(request.url!, `${request.name} URL`);
+    if (url.search || url.hash) log.warn(`${request.name} URL: query and hash are ignored; use routes or themes[].query for parameters`);
+    url.search = '';
+    url.hash = '';
     const root = url.toString().replace(/\/$/, '');
     return { name: request.name, label: sanitizeUrl(root), mode: 'url', url: root };
   }
@@ -249,6 +253,19 @@ export class SideManager {
       includesUncommitted,
       server,
     };
+  }
+
+  /** Best-effort synchronous cleanup for signal handlers, where async work may not finish. */
+  cleanupSync(): void {
+    if (this.opts.keepWorktrees) return;
+    for (const dir of this.worktrees) {
+      try {
+        execFileSync('git', ['worktree', 'remove', '--force', dir], { cwd: this.cfg.repoRoot, stdio: 'ignore' });
+      } catch {
+        // already gone
+      }
+    }
+    if (this.tmpRoot) rmSync(this.tmpRoot, { recursive: true, force: true });
   }
 
   async cleanup(): Promise<void> {

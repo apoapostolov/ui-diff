@@ -197,6 +197,7 @@ export async function runPipeline(opts: RunOptions): Promise<RunOutcome> {
   const sides = new SideManager(cfg, { outDir, keepWorktrees: opts.keepWorktrees });
   const onSignal = () => {
     killAllServers();
+    sides.cleanupSync();
     process.exit(130);
   };
   process.once('SIGINT', onSignal);

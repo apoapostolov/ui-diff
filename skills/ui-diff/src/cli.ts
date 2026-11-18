@@ -404,9 +404,25 @@ async function cmdInit(values: Values): Promise<void> {
   print({ written: path.relative(process.cwd(), file), framework, startCommand: config.startCommand, routes: config.routes, next: 'Review startCommand and routes, then run `ui-diff doctor`.' });
 }
 
+export interface DoctorCheck {
+  check: string;
+  ok: boolean;
+  detail: string;
+  /** Problems the tool fixes on its own (e.g. Chromium is downloaded on first run): WARN, not FAIL. */
+  optional?: boolean;
+}
+
+export function doctorLine(c: DoctorCheck): string {
+  return `${c.ok ? 'ok  ' : c.optional ? 'WARN' : 'FAIL'} ${c.check}: ${c.detail}`;
+}
+
+export function doctorOk(checks: DoctorCheck[]): boolean {
+  return checks.every((c) => c.ok || c.optional);
+}
+
 async function cmdDoctor(values: Values): Promise<void> {
-  const checks: Array<{ check: string; ok: boolean; detail: string }> = [];
-  const add = (check: string, ok: boolean, detail: string) => checks.push({ check, ok, detail });
+  const checks: DoctorCheck[] = [];
+  const add = (check: string, ok: boolean, detail: string, optional = false) => checks.push({ check, ok, detail, ...(optional ? { optional } : {}) });
   const [major, minor] = process.versions.node.split('.').map(Number);
   add('node', major > 20 || (major === 20 && minor >= 10), process.versions.node);
   let root: string | undefined;
@@ -434,9 +450,10 @@ async function cmdDoctor(values: Values): Promise<void> {
     }
   }
   const browser = process.env.UI_DIFF_BROWSER_CHANNEL || process.env.UI_DIFF_CHROMIUM_PATH;
-  add('browser', Boolean(browser) || existsSync(chromium.executablePath()), browser ? `custom: ${browser}` : existsSync(chromium.executablePath()) ? chromium.executablePath() : 'Playwright Chromium not installed (installed automatically on first run)');
-  for (const c of checks) log.info(`${c.ok ? 'ok  ' : 'FAIL'} ${c.check}: ${c.detail}`);
-  print({ ok: checks.every((c) => c.ok || c.check === 'browser'), checks });
+  const installed = existsSync(chromium.executablePath());
+  add('browser', Boolean(browser) || installed, browser ? `custom: ${browser}` : installed ? chromium.executablePath() : 'Playwright Chromium not installed yet (downloaded automatically on the first run)', !browser);
+  for (const c of checks) log.info(doctorLine(c));
+  print({ ok: doctorOk(checks), checks });
 }
 
 export async function main(argv = process.argv.slice(2)): Promise<number> {

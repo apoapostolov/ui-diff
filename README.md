@@ -135,7 +135,7 @@ ui-diff detect --pr 123              # changed UI files → routes, with reasons
 ui-diff run --pr 123                 # capture + diff → .ui-diff/report.json and images
 $EDITOR .ui-diff/summary.md          # your UX summary (start from .ui-diff/summary.auto.md)
 ui-diff render                       # preview the final comment: .ui-diff/comment.preview.md
-ui-diff publish --pr 123 --dry-run   # list uploads; touches no remote and no PR
+ui-diff publish --pr 123 --dry-run   # list uploads and say if a real publish would be refused; pushes and posts nothing
 ui-diff publish --pr 123             # upload to ui-diff-assets + create/update the sticky comment
 ui-diff prune --closed               # remove images of closed PRs
 ```

@@ -103,7 +103,37 @@ export async function getPullRequest(pr: number, repo?: string): Promise<PullReq
   return JSON.parse(result.stdout) as PullRequest;
 }
 
-export async function repoVisibility(remote: RemoteInfo): Promise<'PRIVATE' | 'INTERNAL' | 'PUBLIC' | undefined> {
+export type Visibility = 'PRIVATE' | 'INTERNAL' | 'PUBLIC';
+
+export interface UploadGuard {
+  allowed: boolean;
+  visibility?: Visibility;
+  reason?: string;
+  hint?: string;
+  warning?: string;
+}
+
+/** Whether screenshots may be pushed to the repository's assets branch. Shared by publish and its dry run. */
+export function uploadGuard(visibility: Visibility | undefined, opts: { allowPublic: boolean; assumePrivate: boolean }): UploadGuard {
+  if (visibility === 'PUBLIC' && !opts.allowPublic) {
+    return {
+      allowed: false,
+      visibility,
+      reason: 'This repository is public, so screenshots on its assets branch would be public too',
+      hint: 'Use --no-upload for a text-only comment, or --allow-public-repo if the pages contain nothing sensitive.',
+    };
+  }
+  if (!visibility && !opts.assumePrivate) {
+    return {
+      allowed: false,
+      reason: 'Could not verify that the repository is private (gh could not read its visibility)',
+      hint: 'Run `gh auth login`, or pass --assume-private if you are sure only repository members can read it.',
+    };
+  }
+  return { allowed: true, visibility, warning: visibility === 'INTERNAL' ? 'repository is internal: screenshots are visible to every member of the enterprise' : undefined };
+}
+
+export async function repoVisibility(remote: RemoteInfo): Promise<Visibility | undefined> {
   const slug = remote.host === 'github.com' ? `${remote.owner}/${remote.repo}` : `${remote.host}/${remote.owner}/${remote.repo}`;
   const result = await gh(['repo', 'view', slug, '--json', 'visibility'], { allowFailure: true });
   if (result.code !== 0) return undefined;

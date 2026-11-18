@@ -8,7 +8,7 @@ import { inferFromPath } from './conventions.js';
 import { detectChanges, detectSummary } from './detect.js';
 import { exec } from './exec.js';
 import { git, repoRoot } from './git.js';
-import { createGhClient, findStickyComment, getPullRequest, prState, repoVisibility, upsertStickyComment } from './github.js';
+import { createGhClient, findStickyComment, getPullRequest, prState, repoVisibility, uploadGuard, upsertStickyComment } from './github.js';
 import { configureLog, log, redact, UiDiffError, writeRedacted } from './log.js';
 import { referencedImages, renderComment } from './markdown.js';
 import { runPipeline } from './pipeline.js';
@@ -268,41 +268,40 @@ async function cmdPublish(values: Values): Promise<void> {
   const runDir = `${groupDir}/${runStamp(report)}-${report.head.shortSha ?? 'preview'}`;
   const linkOverride = (values['link-base'] as string | undefined) ?? cfg.publish.linkBase;
   const linkBase = upload ? (info ? linkBaseFor(info, branch, linkOverride) : linkOverride) : undefined;
-  if (upload && !linkBase) throw new UiDiffError(`Cannot derive image links from remote "${remoteName}"`, { hint: 'Set publish.linkBase or pass --link-base.' });
+  const noLinkProblem = `Cannot derive image links from remote "${remoteName}" (missing or not a GitHub URL)`;
+  const noLinkHint = 'Add a GitHub remote, or set publish.linkBase / pass --link-base. `ui-diff render` previews the comment without a remote.';
+  if (upload && !linkBase && !dryRun) throw new UiDiffError(noLinkProblem, { hint: noLinkHint });
   const link = (p: string) => (linkBase ? `${linkBase}/${encodePath(`${runDir}/${p}`)}` : p);
   const storageNote = upload ? `images stored on the \`${branch}\` branch of this repository (visible to people with read access)` : 'images not uploaded';
   const renderOpts = { id: cfg.comment.id, title: cfg.comment.title, summary, storageNote, showUnchanged: cfg.comment.showUnchanged, images: upload };
   const uploads = upload ? referencedImages(report, renderOpts) : [];
   const commentFile = path.join(outDir, 'comment.md');
+  const guard = upload
+    ? uploadGuard(info ? await repoVisibility(info) : undefined, { allowPublic: Boolean(values['allow-public-repo'] || cfg.publish.allowPublicRepo), assumePrivate: Boolean(values['assume-private']) })
+    : undefined;
 
   if (dryRun) {
     const body = renderComment(report, { ...renderOpts, link });
     writeRedacted(commentFile, body);
+    const problems = [upload && !linkBase && noLinkProblem, guard && !guard.allowed && guard.reason].filter((p): p is string => Boolean(p));
+    for (const problem of problems) log.warn(`a real publish would stop here: ${problem}`);
     print({
       dryRun: true,
       pr: prNumber ?? null,
+      publishable: problems.length === 0,
+      problems,
+      hints: [upload && !linkBase && noLinkHint, guard && !guard.allowed && guard.hint].filter(Boolean),
+      visibility: guard?.visibility ?? null,
       wouldUpload: uploads.map((p) => ({ file: path.relative(process.cwd(), path.join(outDir, p)), to: `${branch}:${runDir}/${p}` })),
       comment: path.relative(process.cwd(), commentFile),
       length: body.length,
-      note: 'Nothing was pushed and no PR was contacted.',
+      note: 'Nothing was pushed and no PR was contacted; only the repository visibility was read.',
     });
     return;
   }
 
-  if (upload) {
-    const visibility = info ? await repoVisibility(info) : undefined;
-    if (visibility === 'PUBLIC' && !values['allow-public-repo'] && !cfg.publish.allowPublicRepo) {
-      throw new UiDiffError('This repository is public, so screenshots on its assets branch would be public too', {
-        hint: 'Use --no-upload for a text-only comment, or --allow-public-repo if the pages contain nothing sensitive.',
-      });
-    }
-    if (!visibility && !values['assume-private']) {
-      throw new UiDiffError('Could not verify that the repository is private (gh could not read its visibility)', {
-        hint: 'Run `gh auth login`, or pass --assume-private if you are sure only repository members can read it.',
-      });
-    }
-    if (visibility === 'INTERNAL') log.warn('repository is internal: screenshots are visible to every member of the enterprise');
-  }
+  if (guard && !guard.allowed) throw new UiDiffError(guard.reason!, { hint: guard.hint });
+  if (guard?.warning) log.warn(guard.warning);
 
   const repoSlug = (values.repo as string | undefined) ?? (info ? `${info.owner}/${info.repo}` : undefined);
   if (!repoSlug && !values['no-comment']) throw new UiDiffError('Cannot tell which repository the PR belongs to', { hint: 'Pass --repo owner/name.' });
@@ -484,8 +483,17 @@ async function cmdDoctor(values: Values): Promise<void> {
       const cfg = loadConfig(root, process.cwd(), values.config as string | undefined);
       add('config', true, cfg.file ? `${path.relative(root, cfg.file)}: ${cfg.routes.length} route(s), ${cfg.viewports.length} viewport(s), ${cfg.themes.length} theme(s)` : 'none found (defaults; run `ui-diff init`)');
       add('start command', Boolean(cfg.startCommand || (cfg.preview.base && cfg.preview.head)), cfg.startCommand ?? (cfg.preview.base ? 'preview URLs' : 'missing: set startCommand or preview URLs'));
-      const { info } = await resolveRemote(root, cfg.publish.remote);
-      add('remote', Boolean(info), info ? `${info.host}/${info.owner}/${info.repo}` : `cannot parse remote "${cfg.publish.remote}"`);
+      const { url, info } = await resolveRemote(root, cfg.publish.remote);
+      add(
+        'remote',
+        Boolean(info),
+        info
+          ? `${info.host}/${info.owner}/${info.repo}`
+          : url
+            ? `remote "${cfg.publish.remote}" is not a GitHub URL; publishing needs publish.linkBase (detect, run and render work)`
+            : `no git remote "${cfg.publish.remote}"; publishing needs one (detect, run and render work without it)`,
+        true,
+      );
       const gh = await exec('gh', ['auth', 'status'], { allowFailure: true }).catch(() => ({ code: 1, stdout: '', stderr: 'gh not installed' }));
       add('gh auth', gh.code === 0, gh.code === 0 ? 'authenticated' : (gh.stderr || gh.stdout).trim().split('\n')[0] ?? 'not authenticated');
       if (info && gh.code === 0) {

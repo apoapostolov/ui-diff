@@ -310,11 +310,6 @@ Not built yet; ideas that would make reviews better for design engineers:
    designer ticks "Approved" in the sticky comment, tied to the head SHA so new pushes need a new
    approval.
 
-## Acknowledgements
-
-Inspired by [davidamunga/ui-diff](https://github.com/davidamunga/ui-diff) (MIT). This is an
-independent implementation; no code was copied.
-
 ## License
 
 [MIT](LICENSE) © 2026 Murat Alpay

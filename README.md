@@ -30,7 +30,7 @@ You need git and Node.js 20.10+. On Windows, use WSL2. The GitHub CLI (`gh auth 
 needed to publish: `ui-diff publish` and `--pr <number>`, which reads the pull request from GitHub.
 
 ```bash
-git clone https://github.com/psychedelichip/ui-diff.git ~/src/ui-diff
+git clone https://github.com/imuratalpay/ui-diff.git ~/src/ui-diff
 ~/src/ui-diff/install.sh --claude                   # Claude Code; Cursor reads it too. --codex for Codex
 alias ui-diff='node ~/src/ui-diff/skills/ui-diff/bin/ui-diff.mjs'
 
@@ -85,7 +85,7 @@ and builds it (about a minute); the first capture downloads Playwright's Chromiu
 `~/.cache/ms-playwright`. To use an installed Chrome instead, set `UI_DIFF_BROWSER_CHANNEL=chrome`.
 
 ```bash
-git clone https://github.com/psychedelichip/ui-diff.git ~/src/ui-diff
+git clone https://github.com/imuratalpay/ui-diff.git ~/src/ui-diff
 cd ~/src/ui-diff
 ```
 

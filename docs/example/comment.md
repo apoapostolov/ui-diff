@@ -1,7 +1,7 @@
 <!-- ui-diff:sticky id=default -->
 ### UI diff — 4 changed, 0 unchanged
 
-**Base** `0e9c856` → **Head** `2ff383f` · 1 route · desktop, mobile · light, dark
+**Base** `6737326` → **Head** `09cdd81` · 1 route · desktop, mobile · light, dark
 
 #### Summary
 
@@ -114,5 +114,5 @@ After: textbox "you@company.com" → link "Acme Analytics" → link "Start free 
 | font-size | `13px` | `font.size.sm (14px)` | `span.badge` |
 | color | `#b4b4b4` | `color.neutral.400 (#94a3b8)` | `p.price-note` |
 
-<sub>ui-diff 0.1.0 · base `0e9c856` · head `2ff383f` · rendered locally — nothing uploaded · generated 2026-11-18 12:50:29 UTC</sub>
-<!-- ui-diff:meta {"head":"2ff383fbc45b1d4b9aa9b8a7c576f8240274772b","base":"0e9c85691fd4e5a468e5a2f9826a976812e534ff","createdAt":"2026-11-18T12:50:29.851Z"} -->
+<sub>ui-diff 0.1.0 · base `6737326` · head `09cdd81` · rendered locally — nothing uploaded · generated 2026-11-18 12:50:29 UTC</sub>
+<!-- ui-diff:meta {"head":"09cdd817ea54d12204ba08c461c11d20302e9549","base":"6737326b2e051665eb7b14a33d39acee32ff22de","createdAt":"2026-11-18T12:50:29.851Z"} -->

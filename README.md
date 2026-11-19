@@ -231,8 +231,8 @@ carry bypass or share tokens. Details: [`references/privacy.md`](skills/ui-diff/
 ## Verified example
 
 [`examples/sample-site`](examples/sample-site) is a tiny static page committed twice in this
-repository: [`0e9c856`](../../commit/0e9c85691fd4e5a468e5a2f9826a976812e534ff) (before) and
-[`2ff383f`](../../commit/2ff383fbc45b1d4b9aa9b8a7c576f8240274772b) (after: violet pill CTA, billing
+repository: [`6737326`](../../commit/6737326b2e051665eb7b14a33d39acee32ff22de) (before) and
+[`09cdd81`](../../commit/09cdd817ea54d12204ba08c461c11d20302e9549) (after: violet pill CTA, billing
 toggle, off-token badge, hero variants, an alt-text fix and two deliberate accessibility
 regressions). Running ui-diff on those two commits produced
 [`docs/example/comment.md`](docs/example/comment.md), the exact comment body that `publish` would

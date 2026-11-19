@@ -7,8 +7,8 @@ committed twice:
 
 | Commit | Side | What it contains |
 |---|---|---|
-| `0e9c856` | base | Blue CTA, two pricing cards, labelled newsletter field, chart image without alt text |
-| `2ff383f` | head | Violet pill CTA with hover lift, Monthly/Yearly toggle, highlighted Pro plan with an off-token badge, `?hero=1..4` variants, alt text added, newsletter label removed and `tabindex="1"` |
+| `6737326` | base | Blue CTA, two pricing cards, labelled newsletter field, chart image without alt text |
+| `09cdd81` | head | Violet pill CTA with hover lift, Monthly/Yearly toggle, highlighted Pro plan with an off-token badge, `?hero=1..4` variants, alt text added, newsletter label removed and `tabindex="1"` |
 
 `serve.mjs` is a zero-dependency static server (`node serve.mjs --port 4173`). With
 `SAMPLE_PREVIEW_TOKEN` set it requires an `x-preview-token` header or `preview_token` cookie,
@@ -17,21 +17,20 @@ dark theme via `?theme=dark`, variants, a motion script, the token audit against
 (W3C format; `tokens.css` holds the same tokens as CSS variables) and the accessibility delta.
 The footer shows a frozen clock, a seeded random tip and a masked live counter.
 
-Reproduce from the repository root (if the branch was squash-merged, fetch the original commits
-first with `git fetch origin pull/1/head`):
+Reproduce from the repository root:
 
 ```bash
 SKILL=skills/ui-diff
 CFG=examples/sample-site/ui-diff.config.json
 
-node $SKILL/bin/ui-diff.mjs detect --config $CFG --base 0e9c856 --head 2ff383f
-node $SKILL/bin/ui-diff.mjs run    --config $CFG --base 0e9c856 --head 2ff383f
+node $SKILL/bin/ui-diff.mjs detect --config $CFG --base 6737326 --head 09cdd81
+node $SKILL/bin/ui-diff.mjs run    --config $CFG --base 6737326 --head 09cdd81
 # write .ui-diff/summary.md (docs/example/comment.md shows the one used here), then:
 node $SKILL/bin/ui-diff.mjs render --config $CFG --output docs/example/comment.md --copy-images
 node $SKILL/bin/ui-diff.mjs publish --config $CFG --pr 1 --dry-run     # nothing is pushed or posted
 
 # determinism check: the same commit on both sides → every capture unchanged
-node $SKILL/bin/ui-diff.mjs run --config $CFG --base 2ff383f --head 2ff383f --all-routes
+node $SKILL/bin/ui-diff.mjs run --config $CFG --base 09cdd81 --head 09cdd81 --all-routes
 
 # real upload path against a throwaway local remote, without posting a comment
 git init --bare /tmp/assets.git

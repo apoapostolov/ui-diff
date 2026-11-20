@@ -7,6 +7,8 @@ orphan branch of the same repository, so only people who can read the repo can s
 It is an agent skill (Claude Code, Cursor, Codex) with a TypeScript CLI that humans and CI can run
 directly.
 
+Site: [skills.muratalpay.me/ui-diff](https://skills.muratalpay.me/ui-diff).
+
 <p align="center">
   <img src="docs/example/compare/home__desktop__light__focus-2.png" alt="ui-diff composite: before, after and a highlighted diff of a landing page hero" width="900">
 </p>

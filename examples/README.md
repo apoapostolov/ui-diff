@@ -8,14 +8,16 @@ committed twice:
 | Commit | Side | What it contains |
 |---|---|---|
 | `6737326` | base | Blue CTA, two pricing cards, labelled newsletter field, chart image without alt text |
-| `09cdd81` | head | Violet pill CTA with hover lift, Monthly/Yearly toggle, highlighted Pro plan with an off-token badge, `?hero=1..4` variants, alt text added, newsletter label removed and `tabindex="1"` |
+| `cc13cab` | head | Same page, with the primary button padding 10×18px (was 8×14) and radius 8px (was 4), a 17px gap before the secondary link (was 16), and a brand-blue "Work email" label |
 
 `serve.mjs` is a zero-dependency static server (`node serve.mjs --port 4173`). With
 `SAMPLE_PREVIEW_TOKEN` set it requires an `x-preview-token` header or `preview_token` cookie,
 which is how the protected-preview path was tested. `ui-diff.config.json` enables every extra:
 dark theme via `?theme=dark`, variants, a motion script, the token audit against `tokens.json`
 (W3C format; `tokens.css` holds the same tokens as CSS variables) and the accessibility delta.
-The footer shows a frozen clock, a seeded random tip and a masked live counter.
+The footer shows a frozen clock, a seeded random tip and a masked live counter. The page does
+not branch on `?hero=`, and the motion script's `[data-tab=yearly]` click has no target, so a
+run reports identical variant shots and a single-frame clip.
 
 Reproduce from the repository root:
 
@@ -23,14 +25,14 @@ Reproduce from the repository root:
 SKILL=skills/ui-diff
 CFG=examples/sample-site/ui-diff.config.json
 
-node $SKILL/bin/ui-diff.mjs detect --config $CFG --base 6737326 --head 09cdd81
-node $SKILL/bin/ui-diff.mjs run    --config $CFG --base 6737326 --head 09cdd81
+node $SKILL/bin/ui-diff.mjs detect --config $CFG --base 6737326 --head cc13cab
+node $SKILL/bin/ui-diff.mjs run    --config $CFG --base 6737326 --head cc13cab
 # write .ui-diff/summary.md (docs/example/comment.md shows the one used here), then:
 node $SKILL/bin/ui-diff.mjs render --config $CFG --output docs/example/comment.md --copy-images
 node $SKILL/bin/ui-diff.mjs publish --config $CFG --pr 1 --dry-run     # nothing is pushed or posted
 
 # determinism check: the same commit on both sides → every capture unchanged
-node $SKILL/bin/ui-diff.mjs run --config $CFG --base 09cdd81 --head 09cdd81 --all-routes
+node $SKILL/bin/ui-diff.mjs run --config $CFG --base cc13cab --head cc13cab --all-routes
 
 # real upload path against a throwaway local remote, without posting a comment
 git init --bare /tmp/assets.git

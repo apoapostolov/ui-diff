@@ -1,28 +1,24 @@
 <!-- ui-diff:sticky id=default -->
 ### UI diff — 4 changed, 0 unchanged
 
-**Base** `6737326` → **Head** `09cdd81` · 1 route · desktop, mobile · light, dark
+**Base** `6737326` → **Head** `cc13cab` · 1 route · desktop, mobile · light, dark
 
 #### Summary
 
 **What changed**
-- **Hero**: new headline, "Analytics your whole team will actually use". It wraps to two lines on desktop, which pushes everything below it down (page 1603 → 1744px tall); most of the 18% pixel change in dark mode is that shift, not a restyle of every section.
-- **Primary CTA**: blue rectangle → violet pill (`#2563eb` → `#7c3aed`, radius 4 → 9999px, padding 8×14 → 12×24px) with a hover lift and glow (see the motion clip).
-- **Pricing**: new Monthly/Yearly toggle with a sliding indicator (Pro drops to $24 on yearly), the Pro card gets a 2px violet border, a "Most popular" badge and a "Billed yearly saves 17%" note.
-- **Newsletter**: the visible "Work email" label is gone; the field relies on its placeholder.
-- **Hero variants**: four layouts are available via `?hero=1..4` (default, centered, dark band, split). Pick one below.
+- **Primary button**: padding 8×14 → 10×18px and corner radius 4 → 8px. The button is a few pixels wider and taller, so "See how it works" sits slightly further right and the rest of the page moves down 4px (desktop height 1603 → 1607px). That shift is aligned in the diff and is not counted as a restyle.
+- **Hero actions**: the gap between the button and the secondary link is 16 → 17px.
+- **Newsletter label**: "Work email" is brand blue (`#2563eb`). Its weight is unchanged.
 
 **Worth a look**
-- The "Most popular" badge uses `#ff5a1f`, 13px text and 3×9px padding, none of which are tokens, and white on that orange is 3.1:1 (needs 4.5:1).
-- The price note (`#b4b4b4` on the card) is 2.0:1 in light mode and is not a token color.
-- The email field has `tabindex="1"`: keyboard focus now starts at the bottom of the page and then jumps back to the logo. Its accessible name changed from "Work email" to the placeholder "you@company.com".
-- Fixed: the dashboard chart image now has alt text (axe `image-alt`).
+- In dark mode the label is 3.45:1 (`#2563eb` on `#0f172a`), short of 4.5:1. Light mode passes.
+- The new spacing is off the token scale: `10px` and `18px` on the button (nearest 8px and 16px) and `17px` on the hero actions (nearest 16px).
 
-**Not checked:** `/about.html` (its files and the shared `styles.css` did not change).
+**Not checked:** `/about.html` (its files did not change).
 
 #### Changes
 
-**`/`** · desktop · light — 4.96% of pixels changed · 18 areas · page height 1603 → 1744px
+**`/`** · desktop · light — 0.34% of pixels changed · 2 areas · content shifted down 4px (unchanged, not counted) · page height 1603 → 1607px
 
 <img src="compare/home__desktop__light__focus-1.png" alt="/ · desktop · light: before, after and highlighted diff (zoomed)">
 
@@ -34,17 +30,41 @@
 
 </details>
 
-**`/`** · desktop · dark — 18.0% of pixels changed · 5 areas · page height 1603 → 1744px
+**`/`** · desktop · dark — 0.34% of pixels changed · 2 areas · content shifted down 4px (unchanged, not counted) · page height 1603 → 1607px
+
+<img src="compare/home__desktop__dark__focus-1.png" alt="/ · desktop · dark: before, after and highlighted diff (zoomed)">
+
+<img src="compare/home__desktop__dark__focus-2.png" alt="/ · desktop · dark: before, after and highlighted diff (zoomed)">
+
+<details><summary>Full page</summary>
 
 <img src="compare/home__desktop__dark.png" alt="/ · desktop · dark: before, after and highlighted diff">
 
-**`/`** · mobile · light — 8.08% of pixels changed · 7 areas · page height 1936 → 2063px
+</details>
+
+**`/`** · mobile · light — 0.40% of pixels changed · 2 areas · content shifted down 4px (unchanged, not counted) · page height 1936 → 1940px
+
+<img src="compare/home__mobile__light__focus-1.png" alt="/ · mobile · light: before, after and highlighted diff (zoomed)">
+
+<img src="compare/home__mobile__light__focus-2.png" alt="/ · mobile · light: before, after and highlighted diff (zoomed)">
+
+<details><summary>Full page</summary>
 
 <img src="compare/home__mobile__light.png" alt="/ · mobile · light: before, after and highlighted diff">
 
-**`/`** · mobile · dark — 18.0% of pixels changed · 4 areas · page height 1936 → 2063px
+</details>
+
+**`/`** · mobile · dark — 0.40% of pixels changed · 2 areas · content shifted down 4px (unchanged, not counted) · page height 1936 → 1940px
+
+<img src="compare/home__mobile__dark__focus-1.png" alt="/ · mobile · dark: before, after and highlighted diff (zoomed)">
+
+<img src="compare/home__mobile__dark__focus-2.png" alt="/ · mobile · dark: before, after and highlighted diff (zoomed)">
+
+<details><summary>Full page</summary>
 
 <img src="compare/home__mobile__dark.png" alt="/ · mobile · dark: before, after and highlighted diff">
+
+</details>
 
 #### Variants
 
@@ -73,46 +93,25 @@
 
 <img src="motion/home__desktop__light.gif" alt="/ motion: before and after">
 
+> ⚠️ no motion detected: the clip has a single frame on both sides (nothing animated during these steps)
+
 [before.webm](motion/home__desktop__light__before.webm) · [after.webm](motion/home__desktop__light__after.webm)
 
-#### Accessibility — 3 new, 1 fixed
+#### Accessibility — 1 new, 0 fixed
 
 | | Issue | Impact | Element | Where |
 |---|---|---|---|---|
-| New | [Elements must meet minimum color contrast ratio thresholds](https://dequeuniversity.com/rules/axe/4.14/color-contrast?application=axeAPI) `color-contrast` _(contrast)_ | serious | `.badge` | `/` (all 4) |
-| New | [Elements must meet minimum color contrast ratio thresholds](https://dequeuniversity.com/rules/axe/4.14/color-contrast?application=axeAPI) `color-contrast` _(contrast)_ | serious | `.price-note` | `/` desktop/light, mobile/light |
-| New | [Elements should not have tabindex greater than zero](https://dequeuniversity.com/rules/axe/4.14/tabindex?application=axeAPI) `tabindex` _(focus)_ | serious | `#email` | `/` (all 4) |
-| Fixed | [Images must have alternative text](https://dequeuniversity.com/rules/axe/4.14/image-alt?application=axeAPI) `image-alt` _(labels)_ | critical | `img` | `/` (all 4) |
+| New | [Elements must meet minimum color contrast ratio thresholds](https://dequeuniversity.com/rules/axe/4.14/color-contrast?application=axeAPI) `color-contrast` _(contrast)_ | serious | `label` | `/` desktop/dark, mobile/dark |
 
-**Focus order** on `/ desktop`: focus now jumps against reading order: textbox "you@company.com" → link "Acme Analytics"; tab order of existing controls changed; new tab stops: tab "Monthly", tab "Yearly"; accessible name changed: textbox "Work email" → "you@company.com".
-
-<details><summary>Tab sequence</summary>
-
-Before: link "Acme Analytics" → link "Features" → link "Pricing" → link "About" → link "Start free trial" → link "See how it works" → textbox "Work email" → button "Subscribe"
-
-After: textbox "you@company.com" → link "Acme Analytics" → link "Features" → link "Pricing" → link "About" → link "Start free trial" → link "See how it works" → tab "Monthly" → tab "Yearly" → button "Subscribe"
-
-</details>
-
-**Focus order** on `/ mobile`: focus now jumps against reading order: textbox "you@company.com" → link "Acme Analytics"; tab order of existing controls changed; new tab stops: tab "Monthly", tab "Yearly"; accessible name changed: textbox "Work email" → "you@company.com".
-
-<details><summary>Tab sequence</summary>
-
-Before: link "Acme Analytics" → link "Start free trial" → link "See how it works" → textbox "Work email" → button "Subscribe"
-
-After: textbox "you@company.com" → link "Acme Analytics" → link "Start free trial" → link "See how it works" → tab "Monthly" → tab "Yearly" → button "Subscribe"
-
-</details>
-
-#### Design tokens — 5 new off-token values
+#### Design tokens — 3 new off-token values
 
 | Property | Value | Nearest token | Elements |
 |---|---|---|---|
-| background-color | `#ff5a1f` | — | `span.badge` |
-| spacing | `3px` | `space.1 (4px)` | `span.badge` |
-| spacing | `9px` | `space.2 (8px)` | `span.badge` |
-| font-size | `13px` | `font.size.sm (14px)` | `span.badge` |
-| color | `#b4b4b4` | `color.neutral.400 (#94a3b8)` | `p.price-note` |
+| spacing | `17px` | `space.4 (16px)` | `div.hero-actions` |
+| spacing | `10px` | `space.2 (8px)` | `a.cta` |
+| spacing | `18px` | `space.4 (16px)` | `a.cta` |
 
-<sub>ui-diff 0.1.0 · base `6737326` · head `09cdd81` · rendered locally — nothing uploaded · generated 2026-11-18 12:50:29 UTC</sub>
-<!-- ui-diff:meta {"head":"09cdd817ea54d12204ba08c461c11d20302e9549","base":"6737326b2e051665eb7b14a33d39acee32ff22de","createdAt":"2026-11-18T12:50:29.851Z"} -->
+<sub>Audited the changed areas of 4 captures.</sub>
+
+<sub>ui-diff 0.1.0 · base `6737326` · head `cc13cab` · rendered locally — nothing uploaded · generated 2026-11-20 13:05:18 UTC</sub>
+<!-- ui-diff:meta {"head":"cc13cab81ca4c056ebe8ed861cce6747f2495e59","base":"6737326b2e051665eb7b14a33d39acee32ff22de","createdAt":"2026-11-20T13:05:18.234Z"} -->

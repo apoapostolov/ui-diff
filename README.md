@@ -10,7 +10,7 @@ directly.
 Site: [skills.muratalpay.me/ui-diff](https://skills.muratalpay.me/ui-diff).
 
 <p align="center">
-  <img src="docs/example/compare/home__desktop__light__focus-2.png" alt="ui-diff composite: before, after and a highlighted diff of a landing page hero" width="900">
+  <img src="docs/example/compare/home__mobile__light__focus-1.png" alt="ui-diff composite of the mobile home page: before, after and a highlighted diff of a primary button a few pixels larger, with rounder corners, and the link beside it shifted right" width="900">
 </p>
 
 ## Contents
@@ -234,21 +234,20 @@ carry bypass or share tokens. Details: [`references/privacy.md`](skills/ui-diff/
 
 [`examples/sample-site`](examples/sample-site) is a tiny static page committed twice in this
 repository: [`6737326`](../../commit/6737326b2e051665eb7b14a33d39acee32ff22de) (before) and
-[`09cdd81`](../../commit/09cdd817ea54d12204ba08c461c11d20302e9549) (after: violet pill CTA, billing
-toggle, off-token badge, hero variants, an alt-text fix and two deliberate accessibility
-regressions). Running ui-diff on those two commits produced
-[`docs/example/comment.md`](docs/example/comment.md), the exact comment body that `publish` would
-post (with local image paths), and the images next to it:
+[`cc13cab`](../../commit/cc13cab81ca4c056ebe8ed861cce6747f2495e59) (after: the primary button's
+padding grows from 8×14px to 10×18px, its corner radius from 4px to 8px, the gap before the
+secondary link from 16px to 17px, and the "Work email" label turns brand blue). Running ui-diff
+on those two commits produced [`docs/example/comment.md`](docs/example/comment.md), the exact
+comment body that `publish` would post (with local image paths), and the images next to it.
 
-| Variant compare (`?hero=1..4`) | Motion clip (hover + billing toggle) |
-|---|---|
-| <img src="docs/example/variants/home__desktop__light__hero__strip.png" alt="Four hero variants side by side" width="430"> | <img src="docs/example/motion/home__desktop__light.gif" alt="Before and after motion clip" width="430"> |
-
-It found 4 changed captures (desktop/mobile × light/dark), 3 new accessibility issues (badge and
-price-note contrast, `tabindex` on the email field) and 1 fixed one (`image-alt`), a focus-order
-jump, and 5 new off-token values (`#ff5a1f`, `#b4b4b4`, `3px`, `9px`, `13px`). Comparing the
-after commit with itself reports 8/8 captures unchanged. Publishing was verified against a local
-bare remote; no real PR was contacted. Reproduce with
+It found 4 changed captures (desktop/mobile × light/dark), about 0.34% of pixels on desktop and
+0.40% on mobile. The taller button shifts the rest of the page down 4px (desktop height 1603 →
+1607px); that shift is aligned out of the changed percentage. There is 1 new accessibility issue
+(the email label is 3.45:1 in dark mode) and 3 new off-token spacing values (`10px`, `18px`,
+`17px`). `?hero=1..4` is still configured and every value renders this same page. The motion clip
+is a single frame: the button has no hover animation, and the yearly tab the script clicks is not
+on the page. Comparing the after commit with itself reports 8/8 captures unchanged. Publishing was
+verified against a local bare remote; no real PR was contacted. Reproduce with
 [`examples/README.md`](examples/README.md).
 
 ## Troubleshooting

@@ -103,12 +103,12 @@ designer or PM who will not read the code:
 
 ```markdown
 **What changed**
-- **Hero CTA**: now a violet pill (radius 4 → 9999px, padding 8×14 → 12×24px) with a hover lift.
-- **Pricing**: Monthly/Yearly toggle added; the Pro card is highlighted with a "Most popular" badge.
+- **Primary button**: padding 8×14 → 10×18px, corner radius 4 → 8px. The link beside it shifts right, and the page below moves down 4px.
+- **Newsletter label**: "Work email" is now brand blue.
 
 **Worth a look**
-- The badge uses `#ff5a1f`, which is not a design token, and fails contrast (3.0:1).
-- The newsletter email field lost its visible label and jumps first in tab order (`tabindex="1"`).
+- The label is 3.45:1 in dark mode (`#2563eb` on `#0f172a`).
+- Button padding `10px` / `18px` and the 17px action gap are not spacing tokens.
 
 **Not checked:** `/settings` (needs login).
 ```
